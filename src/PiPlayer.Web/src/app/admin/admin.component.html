@@ -1,0 +1,1036 @@
+@if (booting()) {
+  <main class="login-shell">
+    <p>{{ t("app.connecting") }}</p>
+  </main>
+} @else {
+  <header class="topbar">
+    <a class="brand" href="/admin"
+      ><span class="brand-mark small">π</span>PiPlayer<span class="version"
+        >/ 02</span
+      ></a
+    >
+    <div class="connection">
+      <span class="dot" [class.live]="realtime.connection() === 'online'"></span
+      >Backend {{ realtime.connection() }}<span class="separator">/</span
+      >{{ t("status.screen") }}
+      {{
+        realtime.state()?.screen?.connected
+          ? realtime.state()?.screen?.stale
+            ? "stale"
+            : "online"
+          : "offline"
+      }}
+    </div>
+    <label class="language"
+      >{{ t("app.language")
+      }}<select
+        [value]="i18n.locale()"
+        (change)="use($any($event.target).value)"
+      >
+        @for (option of locales; track option.id) {
+          <option [value]="option.id" [selected]="option.id === i18n.locale()">
+            {{ option.label }}
+          </option>
+        }
+      </select></label
+    ><button class="danger" (click)="command('system', 'stopAll')">
+      {{ t("action.stopAll") }}
+    </button>
+  </header>
+  <nav class="tabs" [attr.aria-label]="t('nav.sections')">
+    <button [class.active]="tab() === 'studio'" (click)="tab.set('studio')">
+      {{ t("tab.studio") }}</button
+    ><button
+      [class.active]="tab() === 'libraries'"
+      (click)="tab.set('libraries')"
+    >
+      {{ t("tab.libraries") }}</button
+    ><button [class.active]="tab() === 'presets'" (click)="tab.set('presets')">
+      {{ t("tab.presets") }}</button
+    ><button [class.active]="tab() === 'startup'" (click)="tab.set('startup')">
+      {{ t("tab.startup") }}</button
+    ><button
+      [class.active]="tab() === 'diagnostics'"
+      (click)="loadDiagnostics()"
+    >
+      {{ t("tab.diagnostics") }}
+    </button>
+  </nav>
+  <main class="workspace">
+    @if (error()) {
+      <div class="error banner" role="alert">
+        {{ error()
+        }}<button
+          class="quiet"
+          (click)="error.set('')"
+          [attr.aria-label]="t('action.dismissError')"
+        >
+          ×
+        </button>
+      </div>
+    }
+    @if (notice()) {
+      <div class="notice" role="status">{{ notice() }}</div>
+    }
+    @if (realtime.state(); as state) {
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">{{ t("brand.eyebrow") }}</p>
+          <h1>
+            {{
+              tab() === "studio"
+                ? t("page.studio")
+                : tab() === "libraries"
+                  ? t("page.libraries")
+                  : tab() === "presets"
+                    ? t("page.presets")
+                    : tab() === "startup"
+                      ? t("page.startup")
+                      : t("page.diagnostics")
+            }}
+          </h1>
+        </div>
+        <div class="save-state" [class.error]="state.persistence === 'failed'">
+          {{
+            state.persistence === "saved"
+              ? t("persistence.saved")
+              : state.persistence === "pending"
+                ? t("persistence.pending")
+                : t("persistence.failed")
+          }}<small>Revision {{ state.revision }}</small>
+        </div>
+      </div>
+      @if (bothAudible()) {
+        <p class="warning">
+          {{ t("warning.bothAudible") }}
+        </p>
+      }
+      @if (
+        state.desired.visual.transform.opacity === 0 &&
+        !state.desired.visual.playback.muted
+      ) {
+        <p class="warning">{{ t("warning.transparentAudible") }}</p>
+      }
+      <section
+        class="channel-overview"
+        [attr.aria-label]="t('channel.overview')"
+      >
+        @for (target of ["visual", "audio"]; track target) {
+          @let isVisual = target === "visual";
+          @let channel = isVisual ? state.desired.visual : state.desired.audio;
+          @let observed =
+            isVisual ? state.observed.visual : state.observed.audio;
+          <article class="status-card">
+            <div class="status-icon">{{ isVisual ? "▣" : "♫" }}</div>
+            <div>
+              <p class="eyebrow">{{ target }}</p>
+              <strong>{{ label(channel.source) }}</strong>
+              <p class="muted">
+                {{ t("channel.requested") }} {{ channel.transport }}
+                <span class="separator">→</span> {{ t("channel.actual") }}
+                <span class="actual">{{
+                  observed?.status ?? t("channel.unconfirmed")
+                }}</span>
+              </p>
+              <small
+                >{{
+                  observed?.capabilities?.isLive
+                    ? "LIVE"
+                    : (observed?.positionSeconds ?? 0 | number: "1.0-1") +
+                      " / " +
+                      (observed?.durationSeconds ?? 0 | number: "1.0-1") +
+                      t("unit.seconds")
+                }}
+                ·
+                {{
+                  channel.playback.muted
+                    ? "Muted"
+                    : channel.playback.volume + "%"
+                }}</small
+              >
+              @if (observed?.error; as failure) {
+                <p class="error">
+                  {{ playbackMessage(failure) }} [{{ failure.code }}]
+                </p>
+              }
+            </div>
+            <div class="mini-transport">
+              <button
+                (click)="command(isVisual ? 'visual' : 'audio', 'play')"
+                [attr.aria-label]="'Play ' + target"
+              >
+                ▶</button
+              ><button
+                (click)="command(isVisual ? 'visual' : 'audio', 'pause')"
+                [attr.aria-label]="'Pause ' + target"
+              >
+                Ⅱ
+              </button>
+            </div>
+          </article>
+        }
+      </section>
+      @if (tab() === "studio") {
+        <div class="studio-grid">
+          <section class="panel preview-panel">
+            <div class="panel-title">
+              <h2>{{ t("panel.screen") }}</h2>
+              <span class="tag"
+                >{{
+                  viewport()
+                    ? previewViewport().cssWidth +
+                      " × " +
+                      previewViewport().cssHeight +
+                      " CSS px"
+                    : t("screen.unknownSize")
+                }}
+                {{ state.screen.connected ? "" : "· stale" }}</span
+              >
+            </div>
+            <div class="preview-frame">
+              <svg
+                #scene
+                class="scene"
+                [attr.viewBox]="viewBox()"
+                [style.aspect-ratio]="
+                  previewViewport().cssWidth + '/' + previewViewport().cssHeight
+                "
+                (pointermove)="onPointerMove($event)"
+                (pointerup)="onPointerUp($event)"
+                (pointercancel)="onPointerUp($event)"
+                [attr.aria-label]="t('preview.aria')"
+              >
+                <defs>
+                  <pattern
+                    id="grid"
+                    width="40"
+                    height="40"
+                    patternUnits="userSpaceOnUse"
+                  >
+                    <path
+                      d="M 40 0 L 0 0 0 40"
+                      fill="none"
+                      stroke="#ffffff10"
+                      stroke-width="1"
+                    />
+                  </pattern>
+                </defs>
+                <rect
+                  [attr.x]="previewBox().x"
+                  [attr.y]="previewBox().y"
+                  [attr.width]="previewBox().width"
+                  [attr.height]="previewBox().height"
+                  fill="url(#grid)"
+                />
+                <rect
+                  x="0"
+                  y="0"
+                  [attr.width]="previewViewport().cssWidth"
+                  [attr.height]="previewViewport().cssHeight"
+                  [attr.fill]="state.desired.background.color"
+                  stroke="#ffffff55"
+                  stroke-width="2"
+                  stroke-dasharray="10 8"
+                  vector-effect="non-scaling-stroke"
+                />
+                <polygon
+                  [attr.points]="polygon()"
+                  fill="#d2fa591c"
+                  stroke="#d2fa59"
+                  stroke-width="2"
+                  vector-effect="non-scaling-stroke"
+                  (pointerdown)="onPointerDown($event, scene)"
+                  class="drag-layer"
+                />
+                @if (guideCircle(); as ring) {
+                  <circle
+                    class="guide-ring"
+                    [attr.cx]="ring.cx"
+                    [attr.cy]="ring.cy"
+                    [attr.r]="ring.radius"
+                    fill="none"
+                    stroke="#ffffffcc"
+                    stroke-width="2"
+                    stroke-dasharray="14 10"
+                    vector-effect="non-scaling-stroke"
+                  />
+                }
+                <circle
+                  [attr.cx]="anchor().x"
+                  [attr.cy]="anchor().y"
+                  r="6"
+                  fill="#d2fa59"
+                />
+                <circle
+                  [attr.cx]="resizePoint().x"
+                  [attr.cy]="resizePoint().y"
+                  r="9"
+                  fill="#d2fa59"
+                  stroke="#15181a"
+                  stroke-width="3"
+                  (pointerdown)="onPointerDown($event, scene, 'resize')"
+                  class="resize-handle"
+                />
+                <line
+                  [attr.x1]="rotateGrip().anchor.x"
+                  [attr.y1]="rotateGrip().anchor.y"
+                  [attr.x2]="rotateGrip().grip.x"
+                  [attr.y2]="rotateGrip().grip.y"
+                  stroke="#d2fa59"
+                  stroke-width="2"
+                  vector-effect="non-scaling-stroke"
+                />
+                <circle
+                  [attr.cx]="rotateGrip().grip.x"
+                  [attr.cy]="rotateGrip().grip.y"
+                  r="9"
+                  fill="#15181a"
+                  stroke="#d2fa59"
+                  stroke-width="3"
+                  (pointerdown)="onPointerDown($event, scene, 'rotate')"
+                  class="rotate-handle"
+                />
+                <text
+                  [attr.x]="anchor().x + 14"
+                  [attr.y]="anchor().y + 30"
+                  fill="#e7eddb"
+                  font-size="18"
+                >
+                  {{ label(state.desired.visual.source) }}
+                </text>
+              </svg>
+            </div>
+            <div class="preview-footer">
+              <span>{{ t("preview.rotationHint") }}</span
+              ><span>
+                @if (guideCircle(); as ring) {
+                  <span
+                    >{{ t("preview.ring") }} {{ ring.millimetres }}
+                    {{ t("unit.mm")
+                    }}{{ ring.calibrated ? "" : t("preview.uncalibrated") }}
+                    ·
+                  </span>
+                }
+                {{ t("preview.screenBounds")
+                }}{{
+                  previewBox().zoom > 1
+                    ? t("preview.zoomedOut") +
+                      (previewBox().zoom | number: "1.1-1")
+                    : ""
+                }}</span
+              >
+            </div>
+            <form [formGroup]="geometry" (ngSubmit)="applyGeometry()">
+              <div class="panel-title geometry-title">
+                <h2>{{ t("panel.geometry") }}</h2>
+                <label class="check"
+                  ><input type="checkbox" formControlName="lockAspect" />{{
+                    t("geometry.lockAspect")
+                  }}</label
+                >
+              </div>
+              <div class="geometry-fields">
+                @for (field of transformFields; track field) {
+                  <label
+                    >{{ t("geometry." + field)
+                    }}<input
+                      type="number"
+                      [formControlName]="field"
+                      [step]="
+                        field === 'scale' || field === 'opacity' ? 0.01 : 1
+                      "
+                      [readOnly]="
+                        isYouTube() &&
+                        (field === 'opacity' ||
+                          (field === 'rotation' &&
+                            !state.enableExperimentalYouTubeRotation))
+                      "
+                  /></label>
+                }
+                <label
+                  >{{ t("geometry.objectFit")
+                  }}<select formControlName="objectFit">
+                    <option value="contain">Contain</option>
+                    <option value="cover" [disabled]="isYouTube()">
+                      Cover
+                    </option>
+                    <option value="fill" [disabled]="isYouTube()">Fill</option>
+                  </select></label
+                >
+              </div>
+              <p class="muted small-text">
+                {{ t("geometry.boundsLabel") }}
+                {{ bounding().minX | number: "1.0-1" }},
+                {{ bounding().minY | number: "1.0-1" }} →
+                {{ bounding().maxX | number: "1.0-1" }},
+                {{ bounding().maxY | number: "1.0-1" }}.
+                {{ t("geometry.pivotHint") }}
+              </p>
+              @if (isYouTube()) {
+                <p class="warning">
+                  {{ t("youtube.constraints") }}
+                  {{
+                    state.enableExperimentalYouTubeRotation
+                      ? t("youtube.rotationExperimental")
+                      : t("youtube.rotationDisabled")
+                  }}.
+                </p>
+              }
+              <div class="button-row">
+                <button
+                  type="button"
+                  (click)="geometryTool('fit')"
+                  [disabled]="!viewport()"
+                >
+                  {{ t("action.fit") }}</button
+                ><button
+                  type="button"
+                  (click)="geometryTool('center')"
+                  [disabled]="!viewport()"
+                >
+                  {{ t("action.centre") }}</button
+                ><button type="button" (click)="geometryTool('reset')">
+                  {{ t("action.reset") }}</button
+                ><button class="primary push-right" type="submit">
+                  {{ t("action.applyGeometry") }}
+                </button>
+              </div>
+            </form>
+            <div class="background-picker">
+              <label
+                >{{ t("geometry.background") }}
+                <input
+                  type="color"
+                  [value]="state.desired.background.color"
+                  (change)="
+                    command('system', 'setBackground', {
+                      color: $any($event.target).value,
+                    })
+                  " /></label
+              ><button class="quiet" (click)="command('visual', 'clear')">
+                {{ t("action.clearScreen") }}
+              </button>
+            </div>
+          </section>
+          <aside class="controls-stack">
+            <section class="panel">
+              <div class="panel-title">
+                <h2><span class="accent">01</span> Visual</h2>
+                <span class="tag">{{ t("tag.video") }}</span>
+              </div>
+              <form [formGroup]="visualSource">
+                <label
+                  >{{ t("field.source")
+                  }}<select formControlName="kind">
+                    <option value="localVideo">
+                      {{ t("option.localVideo") }}
+                    </option>
+                    <option value="youtube">{{ t("option.youtube") }}</option>
+                  </select></label
+                >
+                @if (visualSource.controls.kind.value === "localVideo") {
+                  <label
+                    >{{ t("field.file")
+                    }}<select formControlName="assetId">
+                      <option value="">{{ t("option.chooseVideo") }}</option>
+                      @for (
+                        asset of videoLibrary()?.items ?? [];
+                        track asset.id
+                      ) {
+                        <option
+                          [value]="asset.id"
+                          [disabled]="asset.availability === 'missing'"
+                        >
+                          {{ asset.displayName }}
+                        </option>
+                      }
+                    </select></label
+                  >
+                } @else {
+                  <label
+                    >YouTube URL<input
+                      type="url"
+                      formControlName="url"
+                      placeholder="https://www.youtube.com/watch?v=…" /></label
+                  ><label class="check"
+                    ><input type="checkbox" formControlName="videoOnly" />{{
+                      t("field.videoOnly")
+                    }}</label
+                  >
+                }
+                <div class="button-row">
+                  <button type="button" (click)="selectVisual(false)">
+                    {{ t("action.loadPaused") }}</button
+                  ><button
+                    type="button"
+                    class="primary"
+                    (click)="selectVisual(true)"
+                  >
+                    {{ t("action.selectAndPlay") }}
+                  </button>
+                </div>
+              </form>
+              <div class="transport">
+                <button (click)="command('visual', 'play')">▶ Play</button
+                ><button (click)="command('visual', 'pause')">Ⅱ Pause</button
+                ><button (click)="command('visual', 'resume')">Resume</button
+                ><button (click)="command('visual', 'stop')">■ Stop</button
+                ><button (click)="command('visual', 'restart')">
+                  ↻ Restart
+                </button>
+              </div>
+              <div class="check-row">
+                <label class="check"
+                  ><input
+                    type="checkbox"
+                    [checked]="state.desired.visual.visible"
+                    (change)="
+                      command('visual', 'setVisible', {
+                        value: checked($event),
+                      })
+                    "
+                  />{{ t("field.visible") }}</label
+                ><label class="check"
+                  ><input
+                    type="checkbox"
+                    [checked]="state.desired.visual.playback.loop"
+                    (change)="
+                      command('visual', 'setLoop', { value: checked($event) })
+                    "
+                  />Loop</label
+                ><label class="check"
+                  ><input
+                    type="checkbox"
+                    [checked]="state.desired.visual.playback.muted"
+                    (change)="
+                      command('visual', 'setMuted', { value: checked($event) })
+                    "
+                  />Mute</label
+                >
+              </div>
+              <label class="range-label"
+                >{{ t("field.volume") }}
+                <span>{{ state.desired.visual.playback.volume }}%</span
+                ><input
+                  [attr.aria-label]="t('aria.volumeVisual')"
+                  type="range"
+                  min="0"
+                  max="100"
+                  [value]="state.desired.visual.playback.volume"
+                  (change)="
+                    command('visual', 'setVolume', { value: value($event) })
+                  "
+              /></label>
+              <div class="two-fields">
+                <label
+                  >{{ t("field.rate")
+                  }}<select
+                    [value]="state.desired.visual.playback.playbackRate"
+                    (change)="
+                      command('visual', 'setPlaybackRate', {
+                        value: value($event),
+                      })
+                    "
+                  >
+                    @for (
+                      rate of state.observed.visual?.capabilities
+                        ?.availablePlaybackRates ?? [1];
+                      track rate
+                    ) {
+                      <option
+                        [value]="rate"
+                        [selected]="
+                          rate === state.desired.visual.playback.playbackRate
+                        "
+                      >
+                        {{ rate }}×
+                      </option>
+                    }
+                  </select></label
+                ><label
+                  >{{ t("field.seek")
+                  }}<input
+                    #visualSeek
+                    type="number"
+                    min="0"
+                    value="0"
+                    [disabled]="!state.observed.visual?.capabilities?.canSeek"
+                  /><button
+                    [disabled]="!state.observed.visual?.capabilities?.canSeek"
+                    (click)="
+                      command('visual', 'seek', { seconds: +visualSeek.value })
+                    "
+                  >
+                    {{ t("action.seekGo") }}
+                  </button></label
+                >
+              </div>
+              @if (!state.observed.visual?.capabilities?.canSeek) {
+                <small class="muted">{{ t("hint.seekUnconfirmed") }}</small>
+              }
+              @if (state.desired.visual.source?.kind === "youtubePlaylist") {
+                <div class="button-row">
+                  <button (click)="command('visual', 'playlistPrevious')">
+                    {{ t("action.playlistPrevious") }}</button
+                  ><button (click)="command('visual', 'playlistNext')">
+                    {{ t("action.playlistNext") }}
+                  </button>
+                </div>
+              }
+            </section>
+            <section class="panel audio-panel">
+              <div class="panel-title">
+                <h2><span class="audio-accent">02</span> Audio</h2>
+                <span class="tag">{{ t("tag.independent") }}</span>
+              </div>
+              <form [formGroup]="audioSource">
+                <label
+                  >{{ t("field.source")
+                  }}<select formControlName="kind">
+                    <option value="localFile">
+                      {{ t("option.localAudio") }}
+                    </option>
+                    <option value="remoteAudioUrl">
+                      {{ t("option.remoteAudio") }}
+                    </option>
+                  </select></label
+                >
+                @if (audioSource.controls.kind.value === "localFile") {
+                  <label
+                    >{{ t("field.file")
+                    }}<select formControlName="assetId">
+                      <option value="">{{ t("option.chooseAudio") }}</option>
+                      @for (
+                        asset of audioLibrary()?.items ?? [];
+                        track asset.id
+                      ) {
+                        <option
+                          [value]="asset.id"
+                          [disabled]="asset.availability === 'missing'"
+                        >
+                          {{ asset.displayName }}
+                        </option>
+                      }
+                    </select></label
+                  >
+                } @else {
+                  <label
+                    >HTTP(S) URL<input
+                      formControlName="url"
+                      type="url"
+                      placeholder="https://radio.example/stream"
+                  /></label>
+                  <p class="muted small-text">
+                    {{ t("hint.directAudio") }}
+                  </p>
+                  <label
+                    >{{ t("field.mode")
+                    }}<select formControlName="streamMode">
+                      <option value="auto">Auto</option>
+                      <option value="file">File</option>
+                      <option value="live">Live</option>
+                    </select></label
+                  >
+                }
+                <div class="button-row">
+                  <button type="button" (click)="selectAudio(false)">
+                    {{ t("action.loadPaused") }}</button
+                  ><button
+                    type="button"
+                    class="primary"
+                    (click)="selectAudio(true)"
+                  >
+                    {{ t("action.selectAndPlay") }}
+                  </button>
+                </div>
+              </form>
+              <div class="transport">
+                <button (click)="command('audio', 'play')">▶ Play</button
+                ><button (click)="command('audio', 'pause')">Ⅱ Pause</button
+                ><button (click)="command('audio', 'resume')">Resume</button
+                ><button (click)="command('audio', 'stop')">■ Stop</button
+                ><button (click)="command('audio', 'restart')">↻ Retry</button
+                ><button
+                  (click)="
+                    command('audio', 'setSource', {
+                      source: null,
+                      autoplay: false,
+                    })
+                  "
+                >
+                  {{ t("action.clearAudioSource") }}
+                </button>
+              </div>
+              <div class="check-row">
+                <label class="check"
+                  ><input
+                    type="checkbox"
+                    [checked]="state.desired.audio.playback.loop"
+                    [disabled]="
+                      state.observed.audio?.capabilities?.isLive ||
+                      (state.desired.audio.source?.kind === 'remoteAudioUrl' &&
+                        $any(state.desired.audio.source).streamMode === 'live')
+                    "
+                    (change)="
+                      command('audio', 'setLoop', { value: checked($event) })
+                    "
+                  />Loop</label
+                ><label class="check"
+                  ><input
+                    type="checkbox"
+                    [checked]="state.desired.audio.playback.muted"
+                    (change)="
+                      command('audio', 'setMuted', { value: checked($event) })
+                    "
+                  />Mute</label
+                >
+              </div>
+              <label class="range-label"
+                >{{ t("field.volume") }}
+                <span>{{ state.desired.audio.playback.volume }}%</span
+                ><input
+                  [attr.aria-label]="t('aria.volumeAudio')"
+                  type="range"
+                  min="0"
+                  max="100"
+                  [value]="state.desired.audio.playback.volume"
+                  (change)="
+                    command('audio', 'setVolume', { value: value($event) })
+                  "
+              /></label>
+              <label
+                >{{ t("field.seek")
+                }}<input
+                  #audioSeek
+                  type="number"
+                  min="0"
+                  value="0"
+                  [disabled]="!state.observed.audio?.capabilities?.canSeek"
+                /><button
+                  [disabled]="!state.observed.audio?.capabilities?.canSeek"
+                  (click)="
+                    command('audio', 'seek', { seconds: +audioSeek.value })
+                  "
+                >
+                  {{ t("action.seekGo") }}
+                </button></label
+              ><small class="muted">{{
+                state.observed.audio?.capabilities?.isLive
+                  ? t("hint.liveNoSeek")
+                  : t("hint.seekAfterConfirm")
+              }}</small>
+            </section>
+          </aside>
+        </div>
+      }
+      @if (tab() === "libraries") {
+        @if (uploadProgress() !== null) {
+          <div class="panel upload-progress">
+            <progress max="100" [value]="uploadProgress()"></progress
+            ><span>{{ uploadProgress() }}%</span
+            ><button (click)="cancelUpload()">
+              {{ t("action.cancelUpload") }}
+            </button>
+          </div>
+        }
+        @for (kind of ["videos", "audio"]; track kind) {
+          @let isVideo = kind === "videos";
+          @let library = isVideo ? videoLibrary() : audioLibrary();
+          <section class="panel library-panel">
+            <div class="panel-title">
+              <h2>
+                {{ isVideo ? t("library.videos") : t("library.audio") }}
+                <span class="muted">{{ library?.items?.length ?? 0 }}</span>
+              </h2>
+              <label class="upload-button"
+                >{{ t("action.upload")
+                }}<input
+                  type="file"
+                  multiple
+                  [accept]="
+                    isVideo ? '.mp4,.webm' : '.mp3,.wav,.ogg,.m4a,.flac'
+                  "
+                  [disabled]="uploadProgress() !== null"
+                  (change)="upload(isVideo ? 'videos' : 'audio', $event)"
+              /></label>
+            </div>
+            <p class="muted small-text">
+              {{
+                isVideo ? t("library.videoLimits") : t("library.audioLimits")
+              }}. {{ t("library.codecHint") }}
+            </p>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{{ t("table.name") }}</th>
+                    <th>{{ t("table.format") }}</th>
+                    <th>{{ t("table.state") }}</th>
+                    <th>{{ t("table.uploaded") }}</th>
+                    <th>{{ t("table.actions") }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (asset of library?.items ?? []; track asset.id) {
+                    <tr>
+                      <td>
+                        <strong>{{ asset.displayName }}</strong
+                        ><small>{{
+                          asset.durationSeconds
+                            ? asset.durationSeconds + t("unit.seconds")
+                            : t("library.noMetadata")
+                        }}</small>
+                      </td>
+                      <td>
+                        {{ asset.contentType
+                        }}<small
+                          >{{
+                            asset.sizeBytes / 1048576 | number: "1.1-1"
+                          }}
+                          MiB</small
+                        >
+                      </td>
+                      <td>{{ asset.availability }}</td>
+                      <td>{{ asset.createdAtUtc | date: "dd.MM.yy HH:mm" }}</td>
+                      <td class="table-actions">
+                        <button
+                          (click)="
+                            chooseAsset(isVideo ? 'videos' : 'audio', asset)
+                          "
+                        >
+                          {{ t("action.choose") }}</button
+                        ><button
+                          (click)="
+                            renameAsset(isVideo ? 'videos' : 'audio', asset)
+                          "
+                        >
+                          {{ t("action.rename") }}</button
+                        ><button
+                          class="quiet danger-text"
+                          (click)="
+                            deleteAsset(isVideo ? 'videos' : 'audio', asset)
+                          "
+                        >
+                          {{ t("action.delete") }}
+                        </button>
+                      </td>
+                    </tr>
+                  } @empty {
+                    <tr>
+                      <td colspan="5" class="empty">
+                        {{ t("library.empty") }}
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </section>
+        }
+      }
+      @if (tab() === "presets") {
+        <section class="panel">
+          <h2>{{ t("panel.savePreset") }}</h2>
+          <div class="save-preset">
+            <label
+              >{{ t("field.name")
+              }}<input
+                [formControl]="presetName"
+                maxlength="200"
+                [placeholder]="t('placeholder.presetName')" /></label
+            ><button class="primary" (click)="savePreset('visual')">
+              {{ t("action.savePresetVisual") }}</button
+            ><button (click)="savePreset('audio')">
+              {{ t("action.savePresetAudio") }}
+            </button>
+          </div>
+          <p class="muted">
+            {{ t("presets.saveHint") }}
+          </p>
+        </section>
+        @for (kind of ["visual", "audio"]; track kind) {
+          @let isVisual = kind === "visual";
+          <section class="panel preset-panel">
+            <h2>{{ kind }} presets</h2>
+            @for (
+              preset of (isVisual
+                ? visualPresets()?.items
+                : audioPresets()?.items) ?? [];
+              track preset.id
+            ) {
+              <article class="preset-row">
+                <div>
+                  <strong>{{ preset.name }}</strong
+                  ><small>{{ label(preset.source) }}</small>
+                </div>
+                <div class="button-row">
+                  <button
+                    (click)="
+                      applyPreset(
+                        isVisual ? 'visual' : 'audio',
+                        preset.id,
+                        false
+                      )
+                    "
+                  >
+                    {{ t("action.applyPaused") }}</button
+                  ><button
+                    class="primary"
+                    (click)="
+                      applyPreset(
+                        isVisual ? 'visual' : 'audio',
+                        preset.id,
+                        true
+                      )
+                    "
+                  >
+                    {{ t("action.applyPlaying") }}</button
+                  ><button
+                    (click)="
+                      renamePreset(isVisual ? 'visual' : 'audio', preset)
+                    "
+                  >
+                    {{ t("action.rename") }}</button
+                  ><button
+                    class="quiet danger-text"
+                    (click)="
+                      deletePreset(isVisual ? 'visual' : 'audio', preset)
+                    "
+                  >
+                    {{ t("action.delete") }}
+                  </button>
+                </div>
+              </article>
+            } @empty {
+              <p class="empty">{{ t("presets.empty") }}</p>
+            }
+          </section>
+        }
+      }
+      @if (tab() === "startup") {
+        <section class="panel startup-panel">
+          <form [formGroup]="startupForm" (ngSubmit)="saveStartup()">
+            <h2>{{ t("panel.startup") }}</h2>
+            <label
+              >{{ t("field.mode")
+              }}<select formControlName="startupMode">
+                <option value="defaults">{{ t("option.defaults") }}</option>
+                <option value="resumeLast">
+                  {{ t("option.resumeLast") }}
+                </option>
+              </select></label
+            >
+            @if (startupForm.controls.startupMode.value === "resumeLast") {
+              <p class="warning">
+                {{ t("startup.resumeHint") }}
+              </p>
+            }
+            <div class="startup-columns">
+              <div>
+                <h3>Visual</h3>
+                <label class="check"
+                  ><input
+                    type="checkbox"
+                    formControlName="startVisualOnBoot"
+                  />{{ t("field.startVisual") }}</label
+                ><label
+                  >{{ t("field.startupPreset")
+                  }}<select formControlName="defaultVisualPresetId">
+                    <option [ngValue]="null">
+                      {{ t("option.unassigned") }}
+                    </option>
+                    @for (
+                      preset of visualPresets()?.items ?? [];
+                      track preset.id
+                    ) {
+                      <option [value]="preset.id">{{ preset.name }}</option>
+                    }
+                  </select></label
+                >
+                @if (
+                  startupForm.controls.startVisualOnBoot.value &&
+                  !startupForm.controls.defaultVisualPresetId.value
+                ) {
+                  <small class="warning">{{
+                    t("startup.noVisualPreset")
+                  }}</small>
+                }
+              </div>
+              <div>
+                <h3>Audio</h3>
+                <label class="check"
+                  ><input
+                    type="checkbox"
+                    formControlName="startAudioOnBoot"
+                  />{{ t("field.startAudio") }}</label
+                ><label
+                  >{{ t("field.startupPreset")
+                  }}<select formControlName="defaultAudioPresetId">
+                    <option [ngValue]="null">
+                      {{ t("option.unassigned") }}
+                    </option>
+                    @for (
+                      preset of audioPresets()?.items ?? [];
+                      track preset.id
+                    ) {
+                      <option [value]="preset.id">{{ preset.name }}</option>
+                    }
+                  </select></label
+                >
+                @if (
+                  startupForm.controls.startAudioOnBoot.value &&
+                  !startupForm.controls.defaultAudioPresetId.value
+                ) {
+                  <small class="warning">{{
+                    t("startup.noAudioPreset")
+                  }}</small>
+                }
+              </div>
+            </div>
+            <label
+              >{{ t("field.startupBackground")
+              }}<input type="color" formControlName="backgroundColor"
+            /></label>
+            <div class="button-row">
+              <button class="primary" type="submit">
+                {{ t("action.saveStartup") }}</button
+              ><button type="button" (click)="applyStartup()">
+                {{ t("action.applyStartupNow") }}
+              </button>
+            </div>
+            <p class="muted">
+              {{ t("startup.hint") }}
+            </p>
+          </form>
+        </section>
+      }
+      @if (tab() === "diagnostics") {
+        <section class="panel">
+          <div class="panel-title">
+            <h2>{{ t("panel.diagnostics") }}</h2>
+            <button (click)="loadDiagnostics()">
+              {{ t("action.refresh") }}
+            </button>
+          </div>
+          <p class="muted">
+            {{ t("diagnostics.hint") }}
+          </p>
+          <pre>{{ diagnostics() | json }}</pre>
+          @if (realtime.receipt(); as receipt) {
+            <h3>{{ t("diagnostics.lastCommand") }}</h3>
+            <pre>{{ receipt | json }}</pre>
+          }
+          @for (warning of state.warnings; track $index) {
+            <p class="warning">{{ warning }}</p>
+          }
+        </section>
+      }
+    } @else {
+      <div class="panel empty">{{ t("app.waitingState") }}</div>
+    }
+    <footer>
+      PiPlayer <span>{{ t("footer.tagline") }}</span
+      ><span>LAN / file storage</span>
+    </footer>
+  </main>
+}

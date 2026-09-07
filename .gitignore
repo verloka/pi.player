@@ -1,0 +1,63 @@
+# Build output
+**/bin/
+**/obj/
+**/dist/
+**/.angular/
+**/node_modules/
+*.tsbuildinfo
+
+# The backend's wwwroot is generated: the Angular bundle is copied into it by the build and the
+# publish script wipes it. Never commit it, or a stale UI ships with the release.
+src/PiPlayer.Server/wwwroot/
+
+# Release staging and every generated artifact: ARM64 releases, archives, checksums, test results,
+# screenshots, developer data and the ffmpeg-made E2E fixtures.
+publish/
+artifacts/
+TestResults/
+**/test-results/
+**/playwright-report/
+**/blob-report/
+
+# Runtime library and state. DataPath defaults to "data" next to the executable, and a developer may
+# also point it at the repository root. This is the user's media, presets and settings, never source.
+**/data/
+
+# Machine configuration written on the device by install-systemd.sh, and local developer overrides.
+# The release must ship appsettings.json only.
+appsettings.Production.json
+appsettings.Production.json.bak
+appsettings.*.local.json
+appsettings.Development.json
+.env
+.env.*
+
+# Chromium kiosk profile: cookies and browsing state, only ever local to a machine.
+chromium-profile/
+
+# Editors and IDEs. .vscode holds this project's shared debug configuration, so it is kept file by
+# file rather than ignored wholesale.
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+.aspire/
+
+# Logs and scratch
+*.log
+npm-debug.log*
+yarn-error.log*
+*.swp
+*~
+
+# OS clutter
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/

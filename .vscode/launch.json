@@ -1,0 +1,55 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "PiPlayer: Aspire (backend + frontend)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "PiPlayer: prepare Windows debug",
+      "program": "${workspaceFolder}/src/PiPlayer.AppHost/bin/Debug/net10.0/PiPlayer.AppHost.dll",
+      "cwd": "${workspaceFolder}/src/PiPlayer.AppHost",
+      "console": "internalConsole",
+      "stopAtEntry": false,
+      "justMyCode": true,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:15888",
+        "DOTNET_ENVIRONMENT": "Development",
+        "ASPIRE_ALLOW_UNSECURED_TRANSPORT": "true",
+        "ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL": "http://localhost:18889",
+        "ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL": "http://localhost:18890",
+        "PiPlayer__DataPath": "${workspaceFolder}/artifacts/dev-data"
+      },
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "Login to the dashboard at (http://\\S+)",
+        "uriFormat": "%s"
+      }
+    },
+    {
+      "name": "PiPlayer: Windows screen (Edge)",
+      "type": "pwa-msedge",
+      "request": "launch",
+      "url": "http://localhost:4200/screen",
+      "webRoot": "${workspaceFolder}/src/PiPlayer.Web",
+      "userDataDir": "${workspaceFolder}/artifacts/debug-screen-profile",
+      "runtimeArgs": ["--autoplay-policy=no-user-gesture-required", "--no-first-run"],
+      "sourceMaps": true
+    },
+    {
+      "name": "PiPlayer: Windows admin (Edge)",
+      "type": "pwa-msedge",
+      "request": "launch",
+      "url": "http://localhost:4200/admin",
+      "webRoot": "${workspaceFolder}/src/PiPlayer.Web",
+      "userDataDir": "${workspaceFolder}/artifacts/debug-admin-profile",
+      "sourceMaps": true
+    },
+    {
+      "name": "PiPlayer: attach backend",
+      "type": "coreclr",
+      "request": "attach",
+      "processId": "${command:pickProcess}"
+    }
+  ]
+}
