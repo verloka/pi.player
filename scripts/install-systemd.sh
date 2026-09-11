@@ -45,6 +45,8 @@ if [[ $release != "$target" ]]; then
 fi
 chmod 755 "$target/PiPlayer.Server" "$target"/scripts/*.sh
 chown -R root:root "$target/wwwroot" "$target/scripts"
+source "$target/scripts/kiosk-browser-policy.sh"
+apply_kiosk_policy
 install -d -m 700 -o pi-player -g pi-player "$data"
 if [[ -f $target/appsettings.Production.json ]]; then cp -a "$target/appsettings.Production.json" "$target/appsettings.Production.json.bak"; fi
 python3 - "$target/appsettings.Production.json" "$address" "$data" <<'PY'

@@ -1,0 +1,16 @@
+{
+  "TranslateEnabled": false,
+  "AudioCaptureAllowed": false,
+  "VideoCaptureAllowed": false,
+  "ScreenCaptureAllowed": false,
+  "DefaultNotificationsSetting": 2,
+  "DefaultGeolocationSetting": 2,
+  "DefaultPopupsSetting": 2,
+  "PasswordManagerEnabled": false,
+  "AutofillAddressEnabled": false,
+  "AutofillCreditCardEnabled": false,
+  "BrowserSignin": 0,
+  "PromotionalTabsEnabled": false,
+  "DefaultBrowserSettingEnabled": false,
+  "PrivacySandboxPromptEnabled": false
+}

@@ -86,6 +86,20 @@ if [[ -e $target/current && ! -L $target/current ]]; then echo 'current must be 
 previous=$(readlink -- "$target/current" || true)
 [[ ! -f $dropin ]] || cp -a -- "$dropin" "$backup/90-release.conf"
 cp -a -- "$target/appsettings.Production.json" "$backup/appsettings.Production.json"
+cp -a -- "$target/scripts/start-kiosk.sh" "$backup/start-kiosk.sh"
+launcher_changed=false
+cmp -s -- "$next/scripts/start-kiosk.sh" "$target/scripts/start-kiosk.sh" || launcher_changed=true
+has_kiosk_policy=false
+if [[ -f $next/scripts/kiosk-browser-policy.sh ]]; then
+  source "$next/scripts/kiosk-browser-policy.sh"
+  backup_kiosk_policy "$backup/browser-policy"
+  has_kiosk_policy=true
+fi
+replace_launcher() {
+  # Replace atomically: the running Bash process must keep reading its old file.
+  install -m 755 -- "$1" "$target/scripts/start-kiosk.sh.$deployment_id"
+  mv -f -- "$target/scripts/start-kiosk.sh.$deployment_id" "$target/scripts/start-kiosk.sh"
+}
 wait_ready() {
   for attempt in {1..30}; do
     if systemctl is-active --quiet pi-player.service && curl --silent --fail --max-time 2 http://localhost:5000/api/system/ready >/dev/null; then return 0; fi
@@ -105,6 +119,8 @@ rollback() {
   systemctl stop pi-player.service
   if [[ -n $previous ]]; then switch_link "$previous"; else rm -f -- "$target/current"; fi
   if [[ -f $backup/90-release.conf ]]; then cp -a -- "$backup/90-release.conf" "$dropin"; else rm -f -- "$dropin"; fi
+  if $launcher_changed; then replace_launcher "$backup/start-kiosk.sh"; fi
+  if $has_kiosk_policy; then restore_kiosk_policy "$backup/browser-policy"; fi
   systemctl daemon-reload
   systemctl reset-failed pi-player.service
   if systemctl start pi-player.service && wait_ready; then echo 'Previous version is running and ready.' >&2
@@ -127,7 +143,11 @@ systemctl daemon-reload
 systemctl reset-failed pi-player.service || true
 systemctl start pi-player.service
 wait_ready
+if $has_kiosk_policy; then apply_kiosk_policy; fi
+if $launcher_changed; then replace_launcher "$next/scripts/start-kiosk.sh"; fi
 trap - ERR INT TERM HUP
 python3 "$script_dir/restart-kiosk-browser.py" || echo 'Backend ready, but kiosk refresh failed; inspect the desktop launcher.' >&2
 echo "Deployment ready: $next"
 echo "Previous version and data backup preserved: $backup"
+if $launcher_changed; then echo 'Kiosk launcher updated. Run sudo reboot to apply its changes to the desktop session.'; fi
+if $has_kiosk_policy; then echo 'Chromium kiosk policies installed: translation and unused permission prompts disabled.'; fi

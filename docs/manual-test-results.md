@@ -29,6 +29,16 @@ The browser's refusal of audible autoplay is reproduced by replacing `HTMLMediaE
 
 ## Raspberry Pi acceptance
 
+Kiosk regression checks (from the repository root; Bash, Python and the E2E media fixtures above are required):
+
+```text
+bash tests/scripts/kiosk-policy.test.sh
+python tests/scripts/test_kiosk_profile.py
+node tests/scripts/kiosk-browser.test.cjs
+```
+
+Verified locally: policy installation and reapplication, rollback with an existing or absent policy file, preservation of unrelated policies and profile data, rejected camera/microphone access, disabled notifications, denied location requests, and advancing video and unmuted audio with the launcher's arguments in Windows Chromium 145.0.7632.6. The browser check uses fake input devices without granting permissions. Windows cannot verify Linux policy loading or the native PipeWire camera dialog; both require a reboot check on the Pi.
+
 Every row below is **notRun**. Replace a status with `passed`, `failed`, `blockedByEnvironment` or `experimental` only after a real check, quoting the hardware profile, the media URL, codec, bitrate and frame rate, the steps taken and the result.
 
 | ID | Check | Status |
@@ -65,5 +75,6 @@ Every row below is **notRun**. Replace a status with `passed`, `failed`, `blocke
 | HW-30 | An OS-level mute is not masked by a playing status | notRun |
 | HW-31 | Alignment ring calibrated against the measured panel width, checked with a ruler on the panel | notRun |
 | HW-32 | Captions stay off on the device across a whole playlist | notRun |
+| HW-33 | Cold boot and watchdog restart without keyring, camera portal, translation, permission or restore-tabs dialogs; video and audio play without local input | notRun |
 
 For HW-27 record local muted video, local audible video, local audio, YouTube muted, YouTube audible, and YouTube muted with local Audio separately. No result counts if it needed a local click on the Pi: the device has no input devices, so the picture must arrive on its own.

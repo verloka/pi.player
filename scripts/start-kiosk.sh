@@ -13,6 +13,16 @@ exec 9>"$state_dir/launcher.lock"
 flock -n 9 || { echo 'PiPlayer launcher already running.'; exit 0; }
 printf '%s\n' "$$" >"$state_dir/launcher.pid"
 origin='http://localhost:5000'
+# Keep browser UI and permission dialogs off an unattended screen. PipeWire camera
+# discovery can open an OS portal dialog before a web permission prompt is shown.
+kiosk_args=(
+  --user-data-dir="$profile" --profile-directory=Default --kiosk
+  --no-first-run --no-default-browser-check --password-store=basic --noerrdialogs
+  --deny-permission-prompts --disable-notifications --disable-extensions
+  --disable-features=Translate,WebRtcPipeWireCamera,MediaRouter
+  --disable-session-crashed-bubble --propagate-iph-for-testing
+  --autoplay-policy=no-user-gesture-required
+)
 browser_pid=''
 stop_browser() {
   if [[ -n $browser_pid ]]; then
@@ -33,7 +43,27 @@ while true; do
   restarts=("${recent[@]}")
   if ((${#restarts[@]} >= 3)); then echo 'Restart limit reached; cooling down for 5 minutes.'; sleep 300; continue; fi
   echo 'Launching dedicated Chromium kiosk.'
-  setsid "$chromium" --user-data-dir="$profile" --kiosk --no-first-run --noerrdialogs --autoplay-policy=no-user-gesture-required "$origin/screen" &
+  # Chromium is stopped here. Avoid a restore-tabs prompt after a watchdog kill
+  # or power loss, preserving every other preference and the persistent profile.
+  python3 - "$profile" <<'PY'
+import json, os, pathlib, sys
+path = pathlib.Path(sys.argv[1]) / 'Default' / 'Preferences'
+if path.exists():
+    try:
+        prefs = json.loads(path.read_text(encoding='utf-8'))
+        profile = prefs.setdefault('profile', {})
+        profile['exit_type'] = 'Normal'
+        profile['exited_cleanly'] = True
+        temporary = path.with_name('Preferences.pi-player.tmp')
+        temporary.write_text(json.dumps(prefs), encoding='utf-8')
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+    except (ValueError, TypeError, AttributeError):
+        print('Cannot read Chromium preferences; original file preserved.', file=sys.stderr)
+PY
+  # Avoid desktop keyring creation/unlock dialogs during unattended autologin.
+  # This dedicated kiosk profile must not be used to save passwords.
+  setsid "$chromium" "${kiosk_args[@]}" "$origin/screen" &
   browser_pid=$!
   started=$(date +%s); failures=0; silent_notice=0
   while kill -0 -- "-$browser_pid" 2>/dev/null; do
