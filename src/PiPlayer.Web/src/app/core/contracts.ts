@@ -49,10 +49,19 @@ export interface VisualState extends Channel<VisualSource, VisualPlayback> {
   transform: Transform;
   startPlaylistIndex: number | null;
 }
+/** A disc on the screen above the background and below the video. x and y offset its centre from the screen centre. */
+export interface Circle {
+  x: number;
+  y: number;
+  diameter: number;
+  color: string;
+  visible: boolean;
+}
 export interface Desired {
   visual: VisualState;
   audio: Channel<AudioSource>;
   background: { color: string };
+  circle: Circle;
 }
 export interface Capabilities {
   canSeek: boolean;
@@ -138,11 +147,6 @@ export interface StateEnvelope {
   checkpoints: { visual: Checkpoint | null; audio: Checkpoint | null };
   warnings: string[];
   enableExperimentalYouTubeRotation: boolean;
-  guide: ScreenGuide;
-}
-export interface ScreenGuide {
-  diameterMillimetres: number;
-  screenWidthMillimetres: number;
 }
 export interface Command {
   commandId: string;
@@ -158,6 +162,7 @@ export interface Command {
 export interface Receipt {
   commandId: string;
   status: "accepted" | "applied" | "failed" | "superseded" | "timedOut";
+  serverInstanceId: string;
   revision: number;
   screenOnline: boolean;
   persistence: string;
@@ -195,6 +200,8 @@ export interface VisualPreset {
   referenceViewport: Viewport | null;
   createdAtUtc: string;
   updatedAtUtc: string;
+  /** Null for presets saved before the circle existed: applying them leaves the circle alone. */
+  circle: Circle | null;
 }
 export interface AudioPreset {
   id: string;
@@ -222,6 +229,13 @@ export const defaultTransform: Transform = {
   rotation: 0,
   opacity: 1,
   objectFit: "contain",
+};
+export const defaultCircle: Circle = {
+  x: 0,
+  y: 0,
+  diameter: 400,
+  color: "#ffffff",
+  visible: true,
 };
 export function youtube(source: Source | null): boolean {
   return source?.kind === "youtubeVideo" || source?.kind === "youtubePlaylist";

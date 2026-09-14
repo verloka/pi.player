@@ -91,4 +91,12 @@ public static class Geometry
         }
         return t;
     }
+    // The circle may hang off the screen like the video; a diameter of 0 simply draws nothing.
+    public static Circle CheckCircle(Circle c)
+    {
+        Validate.Require(c != null, "invalidState", "The circle must be present.", 400);
+        Validate.Number(c!.X, -10000, 10000, "circle x"); Validate.Number(c.Y, -10000, 10000, "circle y");
+        Validate.Number(c.Diameter, 0, 8192, "circle diameter"); Validate.Color(c.Color);
+        return c;
+    }
 }

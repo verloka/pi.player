@@ -52,6 +52,24 @@ public class IntegrationTests
         var state = (await anonymous.GetFromJsonAsync<StateEnvelope>("/api/system/state", Json.Options))!;
         (await anonymous.PostAsJsonAsync("/api/commands", Cmd(state, "visual", "setTransform", new Transform(10, 10, 320, 180, 1, 0)), Json.Options)).EnsureSuccessStatusCode();
     }
+    [Fact] public async Task CircleCommandChangesTheSceneAndTravelsWithVisualPresets()
+    {
+        using var app = new TestApp(); using var client = await app.Admin();
+        async Task<StateEnvelope> State() => (await client.GetFromJsonAsync<StateEnvelope>("/api/system/state", Json.Options))!;
+        var state = await State(); Assert.Equal(new Circle(), state.Desired.Circle);
+        var circle = new Circle(80, -30, 250, "#ff8800", true);
+        (await client.PostAsJsonAsync("/api/commands", Cmd(state, "system", "setCircle", circle), Json.Options)).EnsureSuccessStatusCode();
+        state = await State(); Assert.Equal(circle, state.Desired.Circle);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await client.PostAsJsonAsync("/api/commands", Cmd(state, "system", "setCircle", circle with { Diameter = -5 }), Json.Options)).StatusCode);
+        var saved = await client.PostAsJsonAsync("/api/presets/visual", new { name = "Circle", source = (object?)null, visible = true, transform = new Transform(), playback = new VisualPlayback(), initialPositionSeconds = 0, circle }, Json.Options);
+        saved.EnsureSuccessStatusCode();
+        var presetId = (await saved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("items")[0].GetProperty("id").GetString();
+        state = await State();
+        (await client.PostAsJsonAsync("/api/commands", Cmd(state, "system", "setCircle", new Circle()), Json.Options)).EnsureSuccessStatusCode();
+        state = await State(); Assert.Equal(new Circle(), state.Desired.Circle);
+        (await client.PostAsJsonAsync("/api/commands", Cmd(state, "system", "applyPresets", new { visualPresetId = presetId, autoplay = false }), Json.Options)).EnsureSuccessStatusCode();
+        Assert.Equal(circle, (await State()).Desired.Circle);
+    }
     [Fact] public async Task UploadRangeRenameReferencesAndDelete()
     {
         using var app = new TestApp(); using var client = await app.Admin(); var asset = await Upload(client); var id = asset.GetProperty("asset").GetProperty("id").GetString()!;

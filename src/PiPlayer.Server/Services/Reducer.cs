@@ -19,6 +19,7 @@ public static class Reducer
             Audio = a with { Transport = "stopped", StartPositionSeconds = 0, PlaybackGeneration = a.PlaybackGeneration + 1 }
         };
         if (command.Type == "setBackground" && command.Target == "system") return state with { Background = new(p.GetProperty("color").GetString()!) };
+        if (command.Type == "setCircle" && command.Target == "system") return state with { Circle = Json.Read<Circle>(p) };
         Validate.Require(command.Target is "visual" or "audio", "invalidTarget", "Unknown command target.", 400);
         if (new[] { "play", "resume", "pause", "restart", "seek" }.Contains(command.Type))
             Validate.Require(visual ? v.Source != null : a.Source != null, "sourceNotSelected", "Choose a source first.");

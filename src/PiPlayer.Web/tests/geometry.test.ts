@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { defaultTransform, uuid } from "../src/app/core/contracts";
+import {
+  defaultCircle,
+  defaultTransform,
+  uuid,
+} from "../src/app/core/contracts";
 import {
   angleAt,
   bounds,
   centre,
+  centreOffset,
+  circleBounds,
   corners,
   fit,
-  millimetresToPixels,
+  maxScale,
+  placeCentre,
   previewBounds,
   resizeRotated,
   rotateBy,
@@ -102,18 +109,50 @@ describe("CSS geometry", () => {
     // The screen's proportions are preserved, so the schematic never distorts.
     expect(box.width / box.height).toBeCloseTo(1280 / 720, 6);
   });
-  it("converts millimetres with the measured panel width, or 96 dpi without it", () => {
+  it("measures slider positions from the centre of the screen", () => {
     const v = { cssWidth: 1280, cssHeight: 720, devicePixelRatio: 1 };
-    // A 300 mm wide panel showing 1280 px: 225 mm covers three quarters of it.
-    expect(millimetresToPixels(225, v, 300)).toBeCloseTo(960, 6);
-    // Uncalibrated: the CSS convention of 96 pixels per inch.
-    expect(millimetresToPixels(225, v, 0)).toBeCloseTo((225 * 96) / 25.4, 6);
-    expect(millimetresToPixels(25.4, v, 0)).toBeCloseTo(96, 6);
+    const t = { ...defaultTransform, scale: 2, rotation: 45 };
+    const middle = placeCentre(t, v, 0, 0);
+    expect(centreOffset(middle, v)).toEqual({ x: 0, y: 0 });
+    // Only where the block sits changes, never its own size or angle.
+    expect([
+      middle.width,
+      middle.height,
+      middle.scale,
+      middle.rotation,
+    ]).toEqual([640, 360, 2, 45]);
+    expect(centreOffset(placeCentre(middle, v, -100, 50), v)).toEqual({
+      x: -100,
+      y: 50,
+    });
   });
-  it("keeps the alignment ring inside the schematic", () => {
+  it("grows and turns the video about its centre, so size and rotation never shift it", () => {
     const v = { cssWidth: 1280, cssHeight: 720, devicePixelRatio: 1 };
+    const t = placeCentre(defaultTransform, v, 120, -40);
+    for (const next of [
+      { ...t, scale: 2.5 },
+      { ...t, rotation: 90 },
+    ]) {
+      const b = bounds(next);
+      expect((b.minX + b.maxX) / 2).toBeCloseTo(760, 6);
+      expect((b.minY + b.maxY) / 2).toBeCloseTo(320, 6);
+    }
+  });
+  it("caps the size slider at the backend's rendering limits", () => {
+    expect(maxScale(defaultTransform)).toBeCloseTo(6, 6);
+    expect(
+      maxScale({ ...defaultTransform, width: 1920, height: 1080 }),
+    ).toBeCloseTo(2, 6);
+  });
+  it("places the circle from the screen centre and keeps it inside the schematic", () => {
+    const v = { cssWidth: 1280, cssHeight: 720, devicePixelRatio: 1 };
+    const middle = circleBounds(defaultCircle, v);
+    expect([middle.cx, middle.cy, middle.radius]).toEqual([640, 360, 200]);
     const t = { ...defaultTransform, x: 320, y: 180 };
-    const ring = { minX: -200, minY: -150, maxX: 1500, maxY: 900 };
+    const ring = circleBounds(
+      { ...defaultCircle, x: 300, y: -200, diameter: 1200 },
+      v,
+    );
     const box = previewBounds(t, v, ring);
     expect(box.zoom).toBeGreaterThan(1);
     expect(box.x).toBeLessThanOrEqual(ring.minX);

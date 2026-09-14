@@ -27,6 +27,7 @@ import { ChannelRenderer } from "./reconciliation";
 @Component({
   selector: "app-screen",
   template: `<div #root class="screen-root">
+    <div #circle class="circle-layer"></div>
     <div #visual class="visual-layer"></div>
     <div #audio></div>
     @if (needsGesture()) {
@@ -42,6 +43,7 @@ import { ChannelRenderer } from "./reconciliation";
   styles: [
     ":host{display:block;width:100%;height:100%}",
     ".screen-root{position:fixed;inset:0;overflow:hidden;background:#000}",
+    ".circle-layer{position:absolute;display:none;border-radius:50%;pointer-events:none}",
     ".visual-layer{position:absolute;transform-origin:50% 50%}",
     // A signage screen must never be covered by a prompt nobody can dismiss: this is a corner banner.
     ".unlock{position:absolute;z-index:10;left:16px;bottom:16px;max-width:min(520px,calc(100% - 32px));display:flex;align-items:flex-start;gap:12px;border:1px solid rgba(210,250,89,.35);border-radius:10px;padding:12px 16px;text-align:left;cursor:pointer;color:#e8ebdf;background:rgba(10,12,12,.82);font:inherit}",
@@ -53,6 +55,7 @@ import { ChannelRenderer } from "./reconciliation";
 })
 export class ScreenComponent implements AfterViewInit, OnDestroy {
   @ViewChild("root", { static: true }) root!: ElementRef<HTMLDivElement>;
+  @ViewChild("circle", { static: true }) circle!: ElementRef<HTMLDivElement>;
   @ViewChild("visual", { static: true }) visual!: ElementRef<HTMLDivElement>;
   @ViewChild("audio", { static: true }) audio!: ElementRef<HTMLDivElement>;
   readonly needsGesture = signal(false);
@@ -188,6 +191,16 @@ export class ScreenComponent implements AfterViewInit, OnDestroy {
     const element = this.visual.nativeElement;
     this.root.nativeElement.style.backgroundColor =
       state.desired.background.color;
+    // Stacking follows the DOM order: the background, the circle above it, the video above both.
+    const c = state.desired.circle;
+    Object.assign(this.circle.nativeElement.style, {
+      display: c.visible && c.diameter > 0 ? "block" : "none",
+      left: `calc(50% + ${c.x - c.diameter / 2}px)`,
+      top: `calc(50% + ${c.y - c.diameter / 2}px)`,
+      width: c.diameter + "px",
+      height: c.diameter + "px",
+      backgroundColor: c.color,
+    });
     if (
       youtube(v.source) &&
       (!v.visible || document.visibilityState !== "visible")

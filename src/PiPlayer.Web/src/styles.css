@@ -7,6 +7,7 @@
   --muted: #90998e;
   --panel: #1b1f20;
   --border: #303736;
+  --circle: #5ec8ff;
 }
 * {
   box-sizing: border-box;
@@ -345,12 +346,19 @@ strong {
   border-radius: 7px;
   overflow: hidden;
 }
+/* The arrow keys act while the schematic has focus, so the frame shows when they will. */
+.preview-frame:focus-within {
+  border-color: var(--accent);
+}
 .scene {
   display: block;
   width: 100%;
   max-height: 540px;
   touch-action: none;
   overflow: hidden;
+}
+.scene:focus {
+  outline: none;
 }
 .topbar .language {
   display: flex;
@@ -369,8 +377,13 @@ strong {
 .resize-handle {
   cursor: nwse-resize;
 }
-/* The alignment ring is a drawing, never a target: dragging and rotating must pass straight through. */
-.guide-ring {
+/* The circle sits under the video and is moved by its sliders only: the pointer passes straight through. */
+.scene-circle {
+  pointer-events: none;
+  stroke: var(--circle);
+}
+/* The centre dot and the caption sit on the video, so grabbing them must still move it. */
+.scene-mark {
   pointer-events: none;
 }
 .rotate-handle {
@@ -386,6 +399,61 @@ strong {
   font-size: 10px;
   color: #83917d;
   margin: 13px 0 27px;
+}
+.scene-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 28px;
+  border-top: 1px solid var(--border);
+  padding-top: 19px;
+}
+.scene-group {
+  min-width: 0;
+}
+.scene-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.scene-group-title h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  font-weight: 550;
+}
+.scene-group-title button {
+  padding: 6px 11px;
+  font-size: 12px;
+}
+.scene-group .range-label {
+  margin: 11px 0;
+}
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.video-swatch {
+  background: var(--accent);
+}
+.circle-swatch {
+  background: var(--circle);
+}
+.circle-style {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.circle-style label {
+  flex-direction: row;
+  align-items: center;
+  margin: 4px 0;
+}
+.scene-hint {
+  margin: 6px 0 22px;
 }
 .geometry-title {
   border-top: 1px solid var(--border);
@@ -725,6 +793,9 @@ footer span:last-child {
   }
   .geometry-fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .scene-controls {
+    grid-template-columns: 1fr;
   }
   .tag {
     font-size: 8px;

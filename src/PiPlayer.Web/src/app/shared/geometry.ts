@@ -1,4 +1,4 @@
-import { Transform, Viewport } from "../core/contracts";
+import { Circle, Transform, Viewport } from "../core/contracts";
 
 // The layer rotates and scales around its own centre: x/y still address the unrotated box's top-left,
 // and the centre sits at (x + width/2, y + height/2). CSS does the same with transform-origin: 50% 50%.
@@ -33,15 +33,21 @@ export function bounds(t: Transform) {
     maxY: Math.max(...p.map((p) => p.y)),
   };
 }
+/** The largest scale the backend accepts for this box: 4096 px a side and 8 294 400 px of area. */
+export function maxScale(t: Transform): number {
+  return Math.min(
+    4096 / t.width,
+    4096 / t.height,
+    Math.sqrt(8294400 / (t.width * t.height)),
+    8,
+  );
+}
 export function fit(t: Transform, v: Viewport): Transform {
   const b = bounds({ ...t, x: 0, y: 0, scale: 1 });
   const scale = Math.min(
     v.cssWidth / (b.maxX - b.minX),
     v.cssHeight / (b.maxY - b.minY),
-    4096 / t.width,
-    4096 / t.height,
-    Math.sqrt(8294400 / (t.width * t.height)),
-    8,
+    maxScale(t),
   );
   // Scaling happens about the centre, so centring the box centres the rotated shape with it.
   return { ...t, scale, ...centred(t, v) };
@@ -89,6 +95,42 @@ export function previewBounds(
 export function centred(t: Transform, v: Viewport): { x: number; y: number } {
   return { x: (v.cssWidth - t.width) / 2, y: (v.cssHeight - t.height) / 2 };
 }
+/** Offset of the block's centre from the centre of the screen, so a centred block reads 0, 0. */
+export function centreOffset(
+  t: Transform,
+  v: Viewport,
+): { x: number; y: number } {
+  const c = centre(t);
+  return { x: c.x - v.cssWidth / 2, y: c.y - v.cssHeight / 2 };
+}
+/** Puts the block's centre at an offset from the screen centre. Size, scale and angle stay as they are. */
+export function placeCentre(
+  t: Transform,
+  v: Viewport,
+  x: number,
+  y: number,
+): Transform {
+  return {
+    ...t,
+    x: v.cssWidth / 2 + x - t.width / 2,
+    y: v.cssHeight / 2 + y - t.height / 2,
+  };
+}
+/** The circle in screen pixels, placed from the screen centre exactly as the screen draws it. */
+export function circleBounds(c: Circle, v: Viewport) {
+  const cx = v.cssWidth / 2 + c.x,
+    cy = v.cssHeight / 2 + c.y,
+    radius = c.diameter / 2;
+  return {
+    cx,
+    cy,
+    radius,
+    minX: cx - radius,
+    minY: cy - radius,
+    maxX: cx + radius,
+    maxY: cy + radius,
+  };
+}
 /** Grows the box symmetrically about its centre so the dragged corner tracks the pointer. */
 export function resizeRotated(
   t: Transform,
@@ -117,19 +159,6 @@ export function resizeRotated(
     x: t.x - (width - t.width) / 2,
     y: t.y - (height - t.height) / 2,
   };
-}
-/**
- * Millimetres to CSS pixels for the schematic. With the panel's measured width the mapping is exact;
- * without it the CSS convention of 96 pixels per inch applies, which is only right at that density.
- */
-export function millimetresToPixels(
-  millimetres: number,
-  v: Viewport,
-  screenWidthMillimetres: number,
-): number {
-  return screenWidthMillimetres > 0
-    ? (millimetres * v.cssWidth) / screenWidthMillimetres
-    : (millimetres * 96) / 25.4;
 }
 /** Angle of a point around the rotation centre, in radians. Uniform scale cancels out. */
 export function angleAt(

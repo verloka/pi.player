@@ -101,7 +101,7 @@ Open **http://192.168.68.122:5000/admin**. The language switch is in the top bar
 
 1. **Libraries:** upload video (MP4, WebM) or audio (MP3, WAV, OGG, M4A, FLAC). Playback depends on Chromium's codec support.
 2. **Studio → Visual:** select a library video or paste a YouTube URL, then click **Select and play**. **Load paused** prepares it without starting playback.
-3. **Position and size:** drag the frame on the schematic, resize with the bottom-right grip, and rotate with the top grip. Hold Shift to rotate in 15° steps. For exact values, enter coordinates, dimensions and angle, then click **Apply geometry**.
+3. **Position and size:** drag the frame on the schematic, resize with the bottom-right grip, and rotate with the top grip. Hold Shift to rotate in 15° steps. The **Video** sliders move the frame, scale it and turn it about its own centre, and **Reset** puts it back in the middle, upright and at 100%. After a click on the schematic, the arrow keys move the frame by 1 px, or 10 px with Shift. For exact values, enter coordinates, dimensions and angle, then click **Apply geometry**.
 4. **Studio → Audio:** select a library track or a direct HTTP(S) audio URL. A music service page is not an audio URL. Each channel has its own volume, mute and pause; mute Visual if you only want the separate audio track.
 5. **Presets:** save video and audio settings for reuse. Presets start playback from zero.
 6. **Startup:** choose startup presets (`defaults`) and playback flags, or restore the last saved state (`resumeLast`). Saving affects the next backend startup; it does not change the current scene.
@@ -110,7 +110,7 @@ Open **http://192.168.68.122:5000/admin**. The language switch is in the top bar
 
 The panel schematic shows the picture's position. Playback happens on `/screen`, opened by the Pi kiosk; you do not need to open another screen on your computer for normal use.
 
-For a physically accurate 225 mm guide ring, measure the visible display width and set `PiPlayer.ScreenWidthMillimetres` in `/opt/pi-player/appsettings.Production.json`, preserving the other settings. Restart the service. Without calibration the ring size is approximate; set `PiPlayer.GuideCircleDiameterMillimetres` to `0` to hide it.
+The screen draws the background first, then a circle, then the video. The **Circle** sliders set its diameter and its offset from the centre of the screen, and **Reset** returns it to the centre. Its colour and visibility sit under the sliders. The circle is part of the current scene and is saved with visual presets.
 
 ## 3. Debug
 

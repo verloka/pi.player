@@ -66,11 +66,15 @@ public record AudioState
     public double StartPositionSeconds { get; init; }
 }
 public record Background(string Color = "#000000");
+// A disc drawn on the screen above the background and below the video. X and Y offset its centre from the
+// centre of the screen, so the default sits in the middle whatever the panel's resolution.
+public record Circle(double X = 0, double Y = 0, double Diameter = 400, string Color = "#ffffff", bool Visible = true);
 public record DesiredState
 {
     public VisualState Visual { get; init; } = new();
     public AudioState Audio { get; init; } = new();
     public Background Background { get; init; } = new();
+    public Circle Circle { get; init; } = new();
 }
 public record Capabilities(bool CanSeek = false, bool CanLoop = false, bool CanSetVolume = true,
     bool CanMute = true, double[]? AvailablePlaybackRates = null, bool CanRotate = false,
@@ -120,11 +124,7 @@ public record ScreenStatus(bool Connected, bool Stale, ScreenDescriptor? Descrip
 public record Cause(string? CommandId, string Reason);
 public record StateEnvelope(string ServerInstanceId, long Revision, DesiredState Desired,
     Dictionary<string, ObservedChannel> Observed, ScreenStatus Screen, string Persistence, Cause Cause,
-    long TelemetrySequence, Checkpoints Checkpoints, string[] Warnings, bool EnableExperimentalYouTubeRotation,
-    ScreenGuide Guide);
-// A physical alignment ring drawn on the control panel's schematic. ScreenWidthMillimetres is the real
-// measured width of the panel; without it the schematic falls back to the CSS convention of 96 dpi.
-public record ScreenGuide(double DiameterMillimetres, double ScreenWidthMillimetres);
+    long TelemetrySequence, Checkpoints Checkpoints, string[] Warnings, bool EnableExperimentalYouTubeRotation);
 public record CommandEnvelope(string CommandId, string Target, string Type, JsonElement Payload,
     long? ExpectedRevision = null, long? ExpectedPlaybackGeneration = null, string? InteractionId = null,
     long? ClientSequence = null, bool Commit = true);
@@ -137,6 +137,6 @@ public record Asset(string Id, string DisplayName, string FileName, string Conte
     int? Width = null, int? Height = null, string? VideoCodec = null, string? AudioCodec = null);
 public record VisualPreset(string Id, string Name, VisualSource? Source, bool Visible, Transform Transform,
     VisualPlayback Playback, double InitialPositionSeconds, Viewport? ReferenceViewport,
-    DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, Circle? Circle = null);
 public record AudioPreset(string Id, string Name, AudioSource? Source, Playback Playback,
     double InitialPositionSeconds, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);

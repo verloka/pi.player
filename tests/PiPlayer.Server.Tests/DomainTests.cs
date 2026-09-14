@@ -86,6 +86,19 @@ public class DomainTests
         Assert.Equal(state, JsonSerializer.Deserialize<DesiredState>(json, Json.Options));
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Transform>("{\"unknown\":1}", Json.Options));
     }
+    [Fact] public void CircleStartsInTheMiddleAndMovesWithoutTouchingTheVideo()
+    {
+        // A runtime document saved before the circle existed still loads, with the circle at the screen centre.
+        var legacy = JsonSerializer.Deserialize<DesiredState>("{\"visual\":{},\"audio\":{},\"background\":{\"color\":\"#000000\"}}", Json.Options)!;
+        Assert.Equal(new Circle(), legacy.Circle); Assert.Equal(0, legacy.Circle.X); Assert.Equal(0, legacy.Circle.Y);
+        var state = new DesiredState { Visual = new() { Source = new LocalVideo(Json.Id()), Transport = "playing", PlaybackGeneration = 3 } };
+        var moved = Reducer.Apply(state, Command("system", "setCircle", new Circle(-120, 40, 300, "#3366ff", false)), null);
+        Assert.Equal(new Circle(-120, 40, 300, "#3366ff", false), moved.Circle); Assert.Equal(state.Visual, moved.Visual);
+        Assert.Equal(moved.Circle, Geometry.CheckCircle(moved.Circle));
+        Assert.Throws<ApiException>(() => Geometry.CheckCircle(new(Diameter: -1)));
+        Assert.Throws<ApiException>(() => Geometry.CheckCircle(new(X: double.NaN)));
+        Assert.Throws<ApiException>(() => Geometry.CheckCircle(new(Color: "red")));
+    }
     [Fact] public void LeaseRejectsSecondScreenAndOldConnection()
     {
         var sessions = new ScreenSessions(); var first = new ScreenDescriptor("primary", Json.Id(), new(1280,720)); var second = first with { PageSessionId = Json.Id() };

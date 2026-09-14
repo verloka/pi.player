@@ -13,8 +13,10 @@ import {
   Asset,
   AudioPreset,
   AudioSource,
+  Circle,
   Collection,
   Command,
+  defaultCircle,
   defaultTransform,
   Receipt,
   Source,
@@ -35,14 +37,58 @@ import {
   bounds,
   centre,
   centred,
+  centreOffset,
+  circleBounds,
   corners,
   fit,
-  millimetresToPixels,
+  maxScale,
+  placeCentre,
   previewBounds,
   resizeRotated,
   rotateBy,
   rotateHandle,
 } from "../shared/geometry";
+
+/**
+ * A live edit of the video. Every step goes out as an uncommitted setTransform under one interaction id
+ * and the last step commits, so the screen follows a mouse drag, a slider or the arrow keys without a
+ * disk write per step.
+ */
+interface Interaction {
+  id: string;
+  sequence: number;
+  generation: number;
+  pending: Transform | null;
+  final: boolean;
+  inFlight: boolean;
+  timer?: ReturnType<typeof setTimeout>;
+  /** Commits after a quiet spell: a slider let go, the last arrow key pressed. */
+  settle?: ReturnType<typeof setTimeout>;
+  pointer?: {
+    id: number;
+    target: Element;
+    mode: "move" | "resize" | "rotate";
+    startX: number;
+    startY: number;
+    initial: Transform;
+    scale: number;
+    pivotX: number;
+    pivotY: number;
+    startAngle: number;
+  };
+}
+/** How long sliders and arrow keys must stay quiet before their edit commits. */
+const SETTLE_MS = 300;
+const ARROWS: Record<string, [number, number]> = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
+/** Half-range of a slider centred on 0: the given size, widened so the current value is never clamped. */
+function span(size: number, value: number): number {
+  return Math.ceil(Math.max(size, Math.abs(value)));
+}
 
 @Component({
   selector: "app-admin",
@@ -71,43 +117,39 @@ export class AdminComponent implements OnInit, OnDestroy {
       this.viewport() ?? { cssWidth: 960, cssHeight: 540, devicePixelRatio: 1 },
   );
   /**
-   * Physical alignment ring, fixed to the screen rather than to the block: it marks where a real
-   * 225 mm circle sits on the panel, so moving, scaling or rotating the video never moves it. It is
-   * decoration only and takes no pointer input.
+   * The circle as the panel shows it: a local draft while slider commands are on their way, so a slider
+   * never jumps back to a value the backend has not caught up with, and the scene itself otherwise.
    */
-  readonly guideCircle = computed(() => {
-    const guide = this.realtime.state()?.guide;
-    if (!guide || guide.diameterMillimetres <= 0) return null;
-    const viewport = this.previewViewport();
-    const radius =
-      millimetresToPixels(
-        guide.diameterMillimetres,
-        viewport,
-        guide.screenWidthMillimetres,
-      ) / 2;
+  private readonly circleDraft = signal<Circle | null>(null);
+  readonly circle = computed<Circle>(
+    () =>
+      this.circleDraft() ??
+      this.realtime.state()?.desired.circle ??
+      defaultCircle,
+  );
+  /** Where the circle lands on the schematic, or null while it draws nothing on the screen. */
+  readonly circleShape = computed(() => {
+    const c = this.circle();
+    return c.visible && c.diameter > 0
+      ? circleBounds(c, this.previewViewport())
+      : null;
+  });
+  readonly circleRange = computed(() => {
+    const v = this.previewViewport(),
+      c = this.circle();
     return {
-      cx: viewport.cssWidth / 2,
-      cy: viewport.cssHeight / 2,
-      radius,
-      millimetres: guide.diameterMillimetres,
-      calibrated: guide.screenWidthMillimetres > 0,
+      x: span(v.cssWidth, c.x),
+      y: span(v.cssHeight, c.y),
+      diameter: span(Math.hypot(v.cssWidth, v.cssHeight), c.diameter),
     };
   });
-  readonly previewBox = computed(() => {
-    const ring = this.guideCircle();
-    return previewBounds(
+  readonly previewBox = computed(() =>
+    previewBounds(
       this.previewTransform(),
       this.previewViewport(),
-      ring
-        ? {
-            minX: ring.cx - ring.radius,
-            minY: ring.cy - ring.radius,
-            maxX: ring.cx + ring.radius,
-            maxY: ring.cy + ring.radius,
-          }
-        : null,
-    );
-  });
+      this.circleShape(),
+    ),
+  );
   readonly viewBox = computed(() => {
     const b = this.previewBox();
     return `${b.x} ${b.y} ${b.width} ${b.height}`;
@@ -123,6 +165,25 @@ export class AdminComponent implements OnInit, OnDestroy {
     rotateHandle(this.previewTransform(), 46),
   );
   readonly bounding = computed(() => bounds(this.previewTransform()));
+  /** The video sliders read the centre's offset from the screen centre: a centred video sits at 0, 0. */
+  readonly videoOffset = computed(() =>
+    centreOffset(this.previewTransform(), this.previewViewport()),
+  );
+  readonly videoRange = computed(() => {
+    const v = this.previewViewport(),
+      o = this.videoOffset(),
+      t = this.previewTransform();
+    // YouTube refuses a frame under 200 px, so a smaller size would only produce rejected commands.
+    const smallest = this.isYouTube()
+      ? Math.ceil(Math.max(200 / t.width, 200 / t.height) * 100) / 100
+      : 0;
+    return {
+      x: span(v.cssWidth, o.x),
+      y: span(v.cssHeight, o.y),
+      minScale: Math.max(0.05, smallest),
+      maxScale: Math.max(t.scale, Math.floor(maxScale(t) * 100) / 100),
+    };
+  });
   readonly isYouTube = computed(() =>
     youtube(this.realtime.state()?.desired.visual.source ?? null),
   );
@@ -178,26 +239,13 @@ export class AdminComponent implements OnInit, OnDestroy {
   private lastRevision = -1;
   private lastInstance = "";
   private uploadAbort?: AbortController;
-  private drag?: {
-    id: string;
-    startX: number;
-    startY: number;
-    initial: Transform;
-    scale: number;
-    mode: "move" | "resize" | "rotate";
-    pivotX: number;
-    pivotY: number;
-    startAngle: number;
-    sequence: number;
-    revision: number;
-    generation: number;
-    pointerId: number;
-    target: Element;
-    pending: Transform | null;
-    final: boolean;
-    inFlight: boolean;
-    timer?: ReturnType<typeof setTimeout>;
-  };
+  private drag?: Interaction;
+  /** An edit made while the previous interaction was committing. It opens the next one once that lands. */
+  private queued: Transform | null = null;
+  private circlePending: Circle | null = null;
+  private circleSending = false;
+  /** The newest revision this panel's own live commands produced; pushed state may still lag behind it. */
+  private ownRevision = { instance: "", revision: -1 };
   private geometrySubscription = this.geometry.valueChanges.subscribe(() => {
     const next = this.transform();
     const previous = this.previewTransform();
@@ -431,6 +479,10 @@ export class AdminComponent implements OnInit, OnDestroy {
   checked(event: Event): boolean {
     return (event.target as HTMLInputElement).checked;
   }
+  /** Whole numbers for slider captions, never "-0". */
+  round(n: number): number {
+    return Math.round(n) || 0;
+  }
   label(source: Source | null | undefined): string {
     if (!source) return this.t("source.none");
     if (source.kind === "localVideo")
@@ -454,14 +506,18 @@ export class AdminComponent implements OnInit, OnDestroy {
   }
   onPointerDown(
     event: PointerEvent,
-    svg: Element,
+    svg: HTMLElement | SVGElement,
     mode: "move" | "resize" | "rotate" = "move",
   ): void {
-    if (event.button !== 0 || this.drag) return;
-    const state = this.realtime.state();
-    if (!state) return;
+    if (event.button !== 0 || this.drag?.pointer || this.drag?.final) return;
     event.preventDefault();
     event.stopPropagation();
+    // preventDefault also keeps the click from focusing the schematic, and the arrow keys need that focus.
+    svg.focus({ preventScroll: true });
+    const d = this.interaction();
+    if (!d) return;
+    clearTimeout(d.settle);
+    d.settle = undefined;
     svg.setPointerCapture(event.pointerId);
     const box = svg.getBoundingClientRect();
     // The drawn area zooms out when the block overflows, so pointer pixels convert through it.
@@ -472,110 +528,270 @@ export class AdminComponent implements OnInit, OnDestroy {
     const pivot = centre(initial);
     const pivotX = box.left + (pivot.x - view.x) * scale;
     const pivotY = box.top + (pivot.y - view.y) * scale;
-    this.drag = {
-      id: uuid(),
+    d.pointer = {
+      id: event.pointerId,
+      target: svg,
+      mode,
       startX: event.clientX,
       startY: event.clientY,
       initial,
       scale,
-      mode,
       pivotX,
       pivotY,
       startAngle: angleAt(pivotX, pivotY, event.clientX, event.clientY),
+    };
+  }
+  onPointerMove(event: PointerEvent): void {
+    const p = this.drag?.pointer;
+    if (!p || event.pointerId !== p.id || this.drag?.final) return;
+    const dx = event.clientX - p.startX,
+      dy = event.clientY - p.startY;
+    this.live(
+      p.mode === "rotate"
+        ? rotateBy(
+            p.initial,
+            p.startAngle,
+            angleAt(p.pivotX, p.pivotY, event.clientX, event.clientY),
+            event.shiftKey ? 15 : 0,
+          )
+        : p.mode === "resize"
+          ? resizeRotated(
+              p.initial,
+              dx,
+              dy,
+              p.scale,
+              this.geometry.controls.lockAspect.value,
+            )
+          : {
+              ...p.initial,
+              x: p.initial.x + dx / p.scale,
+              y: p.initial.y + dy / p.scale,
+            },
+    );
+  }
+  onPointerUp(event: PointerEvent): void {
+    const p = this.drag?.pointer;
+    if (!p || event.pointerId !== p.id) return;
+    if (p.target.hasPointerCapture(p.id)) p.target.releasePointerCapture(p.id);
+    this.finish();
+  }
+  /** Video sliders: position moves the centre, size scales about it and rotation turns about it. */
+  slideVideo(field: "x" | "y" | "scale" | "rotation", event: Event): void {
+    const value = this.value(event),
+      t = this.transform(),
+      v = this.previewViewport(),
+      o = centreOffset(t, v);
+    this.live(
+      field === "x"
+        ? placeCentre(t, v, value, o.y)
+        : field === "y"
+          ? placeCentre(t, v, o.x, value)
+          : field === "scale"
+            ? { ...t, scale: value }
+            : { ...t, rotation: value },
+    );
+  }
+  settleVideo(): void {
+    this.settle(SETTLE_MS);
+  }
+  /** Back to the middle of the screen at its own size and upright. Width and height are kept. */
+  resetVideo(): void {
+    this.live({
+      ...placeCentre(this.transform(), this.previewViewport(), 0, 0),
+      scale: 1,
+      rotation: 0,
+    });
+    this.settle(0);
+  }
+  /** Arrow keys nudge the video while the schematic has focus: 1 px a press, 10 px with Shift. */
+  onSceneKey(event: KeyboardEvent): void {
+    const arrow = ARROWS[event.key];
+    if (!arrow || event.altKey || event.ctrlKey || event.metaKey) return;
+    event.preventDefault();
+    const step = event.shiftKey ? 10 : 1,
+      t = this.transform();
+    this.live({ ...t, x: t.x + arrow[0] * step, y: t.y + arrow[1] * step });
+    this.settle(SETTLE_MS);
+  }
+  private interaction(): Interaction | null {
+    if (this.drag) return this.drag;
+    const state = this.realtime.state();
+    if (!state) return null;
+    this.drag = {
+      id: uuid(),
       sequence: 0,
-      revision: state.revision,
       generation: state.desired.visual.playbackGeneration,
-      pointerId: event.pointerId,
-      target: svg,
       pending: null,
       final: false,
       inFlight: false,
     };
+    return this.drag;
   }
-  onPointerMove(event: PointerEvent): void {
-    const d = this.drag;
-    if (!d || event.pointerId !== d.pointerId || d.final) return;
-    const dx = event.clientX - d.startX,
-      dy = event.clientY - d.startY;
-    const t =
-      d.mode === "rotate"
-        ? rotateBy(
-            d.initial,
-            d.startAngle,
-            angleAt(d.pivotX, d.pivotY, event.clientX, event.clientY),
-            event.shiftKey ? 15 : 0,
-          )
-        : d.mode === "resize"
-          ? resizeRotated(
-              d.initial,
-              dx,
-              dy,
-              d.scale,
-              this.geometry.controls.lockAspect.value,
-            )
-          : {
-              ...d.initial,
-              x: d.initial.x + dx / d.scale,
-              y: d.initial.y + dy / d.scale,
-            };
+  /** Shows a transform at once and streams it to the screen within the current interaction. */
+  private live(t: Transform): void {
+    if (this.drag?.final) {
+      this.queued = t;
+      this.geometry.patchValue(t);
+      return;
+    }
+    const d = this.interaction();
+    if (!d) return;
+    clearTimeout(d.settle);
+    d.settle = undefined;
     this.geometry.patchValue(t);
     d.pending = t;
     if (!d.timer && !d.inFlight)
       d.timer = setTimeout(() => {
-        if (this.drag) this.drag.timer = undefined;
+        d.timer = undefined;
         void this.sendDrag();
       }, 50);
   }
-  onPointerUp(event: PointerEvent): void {
+  private settle(delay: number): void {
     const d = this.drag;
-    if (!d || event.pointerId !== d.pointerId) return;
+    if (!d || d.final || d.pointer) return;
+    clearTimeout(d.settle);
+    d.settle = setTimeout(() => this.finish(), delay);
+  }
+  private finish(): void {
+    const d = this.drag;
+    if (!d || d.final) return;
     d.final = true;
-    d.pending = this.transform();
     clearTimeout(d.timer);
-    d.timer = undefined;
-    if (d.target.hasPointerCapture(d.pointerId))
-      d.target.releasePointerCapture(d.pointerId);
+    clearTimeout(d.settle);
+    d.timer = d.settle = undefined;
+    d.pending = this.transform();
     void this.sendDrag();
+  }
+  /**
+   * The revision a live command must expect. Any command ends the backend's drag, after which the next
+   * step is checked against the current revision again, so the newest one known is always sent.
+   */
+  private expectedRevision(state: StateEnvelope): number {
+    return this.ownRevision.instance === state.serverInstanceId
+      ? Math.max(this.ownRevision.revision, state.revision)
+      : state.revision;
+  }
+  private async sendLive(
+    command: Omit<Command, "commandId" | "expectedRevision">,
+  ): Promise<void> {
+    const state = this.realtime.state();
+    if (!state) throw new Error(this.t("error.noStateYet"));
+    const receipt = await this.api.request<Receipt>("POST", "/api/commands", {
+      ...command,
+      commandId: uuid(),
+      expectedRevision: this.expectedRevision(state),
+    } satisfies Command);
+    if (
+      receipt.serverInstanceId !== this.ownRevision.instance ||
+      receipt.revision > this.ownRevision.revision
+    )
+      this.ownRevision = {
+        instance: receipt.serverInstanceId,
+        revision: receipt.revision,
+      };
   }
   private async sendDrag(): Promise<void> {
     const d = this.drag;
     if (!d || d.inFlight || !d.pending) return;
+    if (this.circleSending) {
+      // Live commands go one at a time, or each would expect a revision the other is about to change.
+      d.timer ??= setTimeout(() => {
+        d.timer = undefined;
+        void this.sendDrag();
+      }, 50);
+      return;
+    }
     d.inFlight = true;
     const payload = d.pending;
     const final = d.final;
     d.pending = null;
     try {
-      const command: Command = {
-        commandId: uuid(),
+      await this.sendLive({
         target: "visual",
         type: "setTransform",
         payload,
-        expectedRevision: d.revision,
         expectedPlaybackGeneration: d.generation,
         interactionId: d.id,
         clientSequence: ++d.sequence,
         commit: final,
-      };
-      await this.api.request("POST", "/api/commands", command);
+      });
       if (final) {
-        this.drag = undefined;
         const state = await this.api.get<StateEnvelope>("/api/system/state");
+        // Released only now, so an edit made meanwhile waits in the queue instead of racing the commit.
+        this.drag = undefined;
         this.realtime.accept(state);
         this.resetForm(state);
+        const next = this.queued;
+        this.queued = null;
+        if (next) {
+          this.live(next);
+          this.settle(SETTLE_MS);
+        }
       }
     } catch (e) {
-      this.drag = undefined;
+      if (this.drag === d) this.drag = undefined;
+      this.queued = null;
       this.fail(e);
     } finally {
       d.inFlight = false;
-      if (this.drag?.pending)
-        this.drag.timer = setTimeout(
+      if (this.drag === d && d.pending)
+        d.timer = setTimeout(
           () => {
-            if (this.drag) this.drag.timer = undefined;
+            d.timer = undefined;
             void this.sendDrag();
           },
-          this.drag.final ? 0 : 50,
+          d.final ? 0 : 50,
         );
+    }
+  }
+  editCircle(patch: Partial<Circle>): void {
+    const next = { ...this.circle(), ...patch };
+    this.circleDraft.set(next);
+    this.circlePending = next;
+    void this.sendCircle();
+  }
+  /** Back to the centre of the screen at the default diameter. Colour and visibility are kept. */
+  resetCircle(): void {
+    this.editCircle({
+      x: defaultCircle.x,
+      y: defaultCircle.y,
+      diameter: defaultCircle.diameter,
+    });
+  }
+  /**
+   * One setCircle at a time, always the newest value: a slider fires far faster than a command
+   * round-trips, so the positions it passed through are dropped rather than queued.
+   */
+  private async sendCircle(): Promise<void> {
+    if (this.circleSending) return;
+    this.circleSending = true;
+    try {
+      while (this.circlePending) {
+        while (this.drag?.inFlight)
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        const payload = this.circlePending;
+        this.circlePending = null;
+        await this.sendLive({
+          target: "system",
+          type: "setCircle",
+          payload,
+          expectedPlaybackGeneration: null,
+          interactionId: null,
+          clientSequence: null,
+          commit: true,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      this.realtime.accept(
+        await this.api.get<StateEnvelope>("/api/system/state"),
+      );
+    } catch (e) {
+      this.circlePending = null;
+      this.fail(e);
+    } finally {
+      this.circleSending = false;
+      if (this.circlePending) void this.sendCircle();
+      else this.circleDraft.set(null);
     }
   }
   async upload(kind: "videos" | "audio", event: Event): Promise<void> {
@@ -654,6 +870,7 @@ export class AdminComponent implements OnInit, OnDestroy {
               visible: state.desired.visual.visible,
               transform: state.desired.visual.transform,
               referenceViewport: this.viewport(),
+              circle: state.desired.circle,
             }
           : {}),
       };
@@ -738,6 +955,7 @@ export class AdminComponent implements OnInit, OnDestroy {
     this.geometrySubscription.unsubscribe();
     this.uploadAbort?.abort();
     clearTimeout(this.drag?.timer);
+    clearTimeout(this.drag?.settle);
     void this.realtime.stop();
   }
 }

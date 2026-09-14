@@ -103,9 +103,9 @@ public static class CatalogEndpoints
             if (kind == "visual")
             {
                 var input = Json.Read<VisualPresetInput>(body);
-                var state = new DesiredState { Visual = new() { Source = input.Source, Visible = input.Visible, Transform = input.Transform, Playback = input.Playback, StartPositionSeconds = input.InitialPositionSeconds } };
+                var state = new DesiredState { Visual = new() { Source = input.Source, Visible = input.Visible, Transform = input.Transform, Playback = input.Playback, StartPositionSeconds = input.InitialPositionSeconds }, Circle = input.Circle ?? new() };
                 await runtime.ValidateState(state, ct);
-                var preset = new VisualPreset(id ?? Json.Id(), Validate.Name(input.Name), input.Source, input.Visible, input.Transform, input.Playback, input.InitialPositionSeconds, input.ReferenceViewport, now, now);
+                var preset = new VisualPreset(id ?? Json.Id(), Validate.Name(input.Name), input.Source, input.Visible, input.Transform, input.Playback, input.InitialPositionSeconds, input.ReferenceViewport, now, now, input.Circle);
                 return Document(response, await store.Update<CollectionDocument<VisualPreset>>(file, d => { var index = id == null ? -1 : d.Items.FindIndex(p => p.Id == id); if (id != null && index < 0) throw new ApiException(404, "presetNotFound", "Preset not found."); if (index >= 0) d.Items[index] = preset with { CreatedAtUtc = d.Items[index].CreatedAtUtc }; else d.Items.Add(preset); return d; }, expected, ct));
             }
             else
@@ -120,5 +120,5 @@ public static class CatalogEndpoints
     }
 }
 public record RenameRequest(string DisplayName);
-public record VisualPresetInput(string Name, VisualSource? Source, bool Visible, Transform Transform, VisualPlayback Playback, double InitialPositionSeconds = 0, Viewport? ReferenceViewport = null);
+public record VisualPresetInput(string Name, VisualSource? Source, bool Visible, Transform Transform, VisualPlayback Playback, double InitialPositionSeconds = 0, Viewport? ReferenceViewport = null, Circle? Circle = null);
 public record AudioPresetInput(string Name, AudioSource? Source, Playback Playback, double InitialPositionSeconds = 0);

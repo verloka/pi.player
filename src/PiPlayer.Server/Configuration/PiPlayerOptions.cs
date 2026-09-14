@@ -11,11 +11,6 @@ public class PiPlayerOptions
     // Rotating the embedded YouTube player is enabled by design here. It remains a switch because it is
     // a modification of the provider's surface: turn it off if a deployment must stay conservative.
     public bool EnableExperimentalYouTubeRotation { get; set; } = true;
-    // Dashed alignment ring on the control panel's schematic. 0 hides it.
-    public double GuideCircleDiameterMillimetres { get; set; } = 225;
-    // Measured width of the physical panel. 0 means unknown: the schematic then assumes 96 dpi, which
-    // is only right if the display really has that density.
-    public double ScreenWidthMillimetres { get; set; }
     public string[] RemoteAudioAllowedHosts { get; set; } = [];
     // Left empty on purpose: the configuration binder appends to a non-empty array, which would
     // duplicate the schedule whenever appsettings.json also lists it. Defaults are applied below.

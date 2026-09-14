@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  defaultCircle,
   defaultTransform,
   StateEnvelope,
   Source,
@@ -30,6 +31,7 @@ function state(): StateEnvelope {
         startPositionSeconds: 0,
       },
       background: { color: "#000000" },
+      circle: defaultCircle,
     },
     observed: {},
     screen: {
@@ -44,7 +46,6 @@ function state(): StateEnvelope {
     checkpoints: { visual: null, audio: null },
     warnings: [],
     enableExperimentalYouTubeRotation: false,
-    guide: { diameterMillimetres: 225, screenWidthMillimetres: 0 },
   };
 }
 function adapter(source: Source): PlayerAdapter {

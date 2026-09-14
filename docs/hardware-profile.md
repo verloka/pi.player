@@ -12,7 +12,6 @@ Status: **notRun**. No Raspberry Pi is attached to the development environment.
 | Audio server / sink / physical output | unknown |
 | Mount / filesystem / free space | unknown |
 | SSH / hostname / LAN CIDR | unknown |
-| Panel width in millimetres (ring calibration) | unknown |
 
 Save the output of `bash scripts/preflight.sh hardware-profile.json` before installing, then complete it with the facts only a graphical session can report. The reference target is Raspberry Pi OS Desktop, ARM64, labwc, LightDM. That is a constraint of the installation script, not an established fact about the user's device.
 

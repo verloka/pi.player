@@ -27,7 +27,6 @@ Final release run: **49 backend tests**, **40 frontend tests** and **5 Chromium 
 - Authentication was removed entirely on request: no accounts, cookie sessions, CSRF or roles. Access is bounded only by the network and the installer's nftables rule.
 - No scenario needs an input device. When the browser refuses sound the picture keeps running muted, the screen checks every 5 seconds with a silent probe whether sound is permitted and turns it on with no gesture, a refused start retries, and a stalled screen is restarted by the launcher. Verified in Chromium with a simulated refusal; the behaviour of the kiosk flag on the device itself is **not verified in hardware**.
 - The browser's refusal of audible autoplay cannot be reproduced inside Playwright, which always permits sound and ignores `--autoplay-policy=user-gesture-required`. E2E simulates the refusal by replacing `play()`, and the application's reaction is genuine.
-- The alignment ring assumes 96 dpi until the panel width is measured and configured, so 225 mm is only physically accurate after calibration.
 - Checkpoint recovery may repeat a few seconds. Seamless looping, frame synchronisation, physical audibility and long-run performance are not claimed.
 - There is no real v1 data. A version guard and preservation of the originals are implemented; the elaborate v1 migration engine was not built, which the specification permits.
 

@@ -27,8 +27,7 @@ public sealed class Runtime(JsonStore store, MediaLibrary library, DependencyCoo
     public string? InitializationError { get; private set; }
     public async Task<StateEnvelope> Snapshot()
     { await gate.WaitAsync(); try { return Envelope(); } finally { gate.Release(); } }
-    private StateEnvelope Envelope() => new(instance, revision, desired, new(observed), sessions.Status, persistence, cause, telemetrySequence, checkpoints, store.Warnings.ToArray(), options.EnableExperimentalYouTubeRotation,
-        new(options.GuideCircleDiameterMillimetres, options.ScreenWidthMillimetres));
+    private StateEnvelope Envelope() => new(instance, revision, desired, new(observed), sessions.Status, persistence, cause, telemetrySequence, checkpoints, store.Warnings.ToArray(), options.EnableExperimentalYouTubeRotation);
     public async Task Initialize(CancellationToken ct)
     {
         try
@@ -72,7 +71,7 @@ public sealed class Runtime(JsonStore store, MediaLibrary library, DependencyCoo
     public async Task ValidateState(DesiredState state, CancellationToken ct, string? target = null, bool allowMissing = false)
     {
         Validate.Require(state.Visual != null && state.Audio != null && state.Background != null && state.Visual.Transform != null && state.Visual.Playback != null && state.Audio.Playback != null, "invalidState", "Channel objects, geometry, playback and background must be present.", 400);
-        Validate.Color(state.Background.Color);
+        Validate.Color(state.Background.Color); Geometry.CheckCircle(state.Circle);
         async Task Check(object? source)
         {
             try { await library.CheckSource(source, ct); }
@@ -94,6 +93,8 @@ public sealed class Runtime(JsonStore store, MediaLibrary library, DependencyCoo
             var p = (await store.Read<CollectionDocument<VisualPreset>>("presets/visual-presets.json", ct)).Items.Find(p => p.Id == visualId) ?? throw new ApiException(404, "presetNotFound", "Visual preset not found.");
             current = current with { Visual = new() { Source = p.Source, Visible = p.Visible, Transform = p.Transform, Playback = p.Playback, PlaybackGeneration = current.Visual.PlaybackGeneration + 1, StartPositionSeconds = p.InitialPositionSeconds, Transport = p.Source == null ? "stopped" : autoplay && p.Visible ? "playing" : "paused" } };
             if (p.ReferenceViewport != null && sessions.Status.Descriptor?.Viewport is { } viewport && (viewport.CssWidth != p.ReferenceViewport.CssWidth || viewport.CssHeight != p.ReferenceViewport.CssHeight)) store.Warnings.Enqueue("Preset viewport differs; CSS coordinates preserved. Use Adapt explicitly.");
+            // Presets saved before the circle existed carry none and leave the current one alone.
+            if (p.Circle != null) current = current with { Circle = p.Circle };
         }
         if (audioId != null)
         {
@@ -141,7 +142,7 @@ public sealed class Runtime(JsonStore store, MediaLibrary library, DependencyCoo
                 else
                 {
                     if (command.Target == "visual" && command.Type is not ("pause" or "stop" or "setVisible" or "setVolume" or "setMuted")) Geometry.Check(next.Visual.Transform, next.Visual.Source is YouTubeVideo or YouTubePlaylist, options);
-                    Validate.Number(next.Visual.Playback.Volume, 0, 100, "volume"); Validate.Number(next.Audio.Playback.Volume, 0, 100, "volume"); Validate.Number(next.Visual.Playback.PlaybackRate, .25, 4, "rate"); Validate.Color(next.Background.Color);
+                    Validate.Number(next.Visual.Playback.Volume, 0, 100, "volume"); Validate.Number(next.Audio.Playback.Volume, 0, 100, "volume"); Validate.Number(next.Visual.Playback.PlaybackRate, .25, 4, "rate"); Validate.Color(next.Background.Color); Geometry.CheckCircle(next.Circle);
                     if (next.Audio.Source is RemoteAudioUrl { StreamMode: "live" }) Validate.Require(!next.Audio.Playback.Loop, "capabilityNotSupported", "Live audio cannot loop.");
                 }
                 next = next with { Visual = next.Visual with { Transform = next.Visual.Transform with { Rotation = (next.Visual.Transform.Rotation % 360 + 360) % 360 } } };
@@ -171,7 +172,7 @@ public sealed class Runtime(JsonStore store, MediaLibrary library, DependencyCoo
         {
             "setSource" => ["source", "autoplay"], "setTransform" => ["x", "y", "width", "height", "scale", "rotation", "opacity", "objectFit"],
             "setVolume" or "setMuted" or "setLoop" or "setPlaybackRate" or "setVisible" => ["value"], "seek" => ["seconds"],
-            "setBackground" => ["color"], "applyPresets" => ["visualPresetId", "audioPresetId", "autoplay"],
+            "setBackground" => ["color"], "setCircle" => ["x", "y", "diameter", "color", "visible"], "applyPresets" => ["visualPresetId", "audioPresetId", "autoplay"],
             "play" or "pause" or "resume" or "stop" or "restart" or "clear" or "stopAll" or "playlistNext" or "playlistPrevious" => [],
             _ => throw new ApiException(400, "unknownCommand", "Unknown command type.")
         };

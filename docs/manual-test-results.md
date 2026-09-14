@@ -73,7 +73,7 @@ Every row below is **notRun**. Replace a status with `passed`, `failed`, `blocke
 | HW-28 | YouTube rotation on the device plus a policy review | notRun |
 | HW-29 | Seek and loop on a large local file, Range and memory | notRun |
 | HW-30 | An OS-level mute is not masked by a playing status | notRun |
-| HW-31 | Alignment ring calibrated against the measured panel width, checked with a ruler on the panel | notRun |
+| HW-31 | The circle is drawn above the background and below the video, at the position and diameter set by its sliders | notRun |
 | HW-32 | Captions stay off on the device across a whole playlist | notRun |
 | HW-33 | Cold boot and watchdog restart without keyring, camera portal, translation, permission or restore-tabs dialogs; video and audio play without local input | notRun |
 

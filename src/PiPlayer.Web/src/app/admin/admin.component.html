@@ -191,10 +191,12 @@
               <svg
                 #scene
                 class="scene"
+                tabindex="0"
                 [attr.viewBox]="viewBox()"
                 [style.aspect-ratio]="
                   previewViewport().cssWidth + '/' + previewViewport().cssHeight
                 "
+                (keydown)="onSceneKey($event)"
                 (pointermove)="onPointerMove($event)"
                 (pointerup)="onPointerUp($event)"
                 (pointercancel)="onPointerUp($event)"
@@ -233,6 +235,17 @@
                   stroke-dasharray="10 8"
                   vector-effect="non-scaling-stroke"
                 />
+                @if (circleShape(); as ring) {
+                  <circle
+                    class="scene-circle"
+                    [attr.cx]="ring.cx"
+                    [attr.cy]="ring.cy"
+                    [attr.r]="ring.radius"
+                    [attr.fill]="circle().color"
+                    stroke-width="2"
+                    vector-effect="non-scaling-stroke"
+                  />
+                }
                 <polygon
                   [attr.points]="polygon()"
                   fill="#d2fa591c"
@@ -242,20 +255,8 @@
                   (pointerdown)="onPointerDown($event, scene)"
                   class="drag-layer"
                 />
-                @if (guideCircle(); as ring) {
-                  <circle
-                    class="guide-ring"
-                    [attr.cx]="ring.cx"
-                    [attr.cy]="ring.cy"
-                    [attr.r]="ring.radius"
-                    fill="none"
-                    stroke="#ffffffcc"
-                    stroke-width="2"
-                    stroke-dasharray="14 10"
-                    vector-effect="non-scaling-stroke"
-                  />
-                }
                 <circle
+                  class="scene-mark"
                   [attr.cx]="anchor().x"
                   [attr.cy]="anchor().y"
                   r="6"
@@ -291,6 +292,7 @@
                   class="rotate-handle"
                 />
                 <text
+                  class="scene-mark"
                   [attr.x]="anchor().x + 14"
                   [attr.y]="anchor().y + 30"
                   fill="#e7eddb"
@@ -301,16 +303,10 @@
               </svg>
             </div>
             <div class="preview-footer">
-              <span>{{ t("preview.rotationHint") }}</span
+              <span
+                >{{ t("preview.rotationHint") }} ·
+                {{ t("preview.keysHint") }}</span
               ><span>
-                @if (guideCircle(); as ring) {
-                  <span
-                    >{{ t("preview.ring") }} {{ ring.millimetres }}
-                    {{ t("unit.mm")
-                    }}{{ ring.calibrated ? "" : t("preview.uncalibrated") }}
-                    ·
-                  </span>
-                }
                 {{ t("preview.screenBounds")
                 }}{{
                   previewBox().zoom > 1
@@ -320,6 +316,135 @@
                 }}</span
               >
             </div>
+            <div class="scene-controls">
+              <section class="scene-group" [attr.aria-label]="t('scene.video')">
+                <div class="scene-group-title">
+                  <h3>
+                    <span class="swatch video-swatch"></span
+                    >{{ t("scene.video") }}
+                  </h3>
+                  <button type="button" (click)="resetVideo()">
+                    {{ t("action.reset") }}
+                  </button>
+                </div>
+                <label class="range-label"
+                  >{{ t("scene.horizontal") }}
+                  <span>{{ round(videoOffset().x) }} px</span
+                  ><input
+                    type="range"
+                    step="1"
+                    [min]="-videoRange().x"
+                    [max]="videoRange().x"
+                    [value]="videoOffset().x"
+                    (input)="slideVideo('x', $event)"
+                    (change)="settleVideo()"
+                /></label>
+                <label class="range-label"
+                  >{{ t("scene.vertical") }}
+                  <span>{{ round(videoOffset().y) }} px</span
+                  ><input
+                    type="range"
+                    step="1"
+                    [min]="-videoRange().y"
+                    [max]="videoRange().y"
+                    [value]="videoOffset().y"
+                    (input)="slideVideo('y', $event)"
+                    (change)="settleVideo()"
+                /></label>
+                <label class="range-label"
+                  >{{ t("scene.size") }}
+                  <span>{{ round(previewTransform().scale * 100) }}%</span
+                  ><input
+                    type="range"
+                    step="0.01"
+                    [min]="videoRange().minScale"
+                    [max]="videoRange().maxScale"
+                    [value]="previewTransform().scale"
+                    (input)="slideVideo('scale', $event)"
+                    (change)="settleVideo()"
+                /></label>
+                <label class="range-label"
+                  >{{ t("scene.rotation") }}
+                  <span>{{ round(previewTransform().rotation) }}°</span
+                  ><input
+                    type="range"
+                    min="0"
+                    max="360"
+                    step="1"
+                    [value]="previewTransform().rotation"
+                    [disabled]="
+                      isYouTube() && !state.enableExperimentalYouTubeRotation
+                    "
+                    (input)="slideVideo('rotation', $event)"
+                    (change)="settleVideo()"
+                /></label>
+              </section>
+              <section
+                class="scene-group"
+                [attr.aria-label]="t('scene.circle')"
+              >
+                <div class="scene-group-title">
+                  <h3>
+                    <span class="swatch circle-swatch"></span
+                    >{{ t("scene.circle") }}
+                  </h3>
+                  <button type="button" (click)="resetCircle()">
+                    {{ t("action.reset") }}
+                  </button>
+                </div>
+                <label class="range-label"
+                  >{{ t("scene.horizontal") }}
+                  <span>{{ round(circle().x) }} px</span
+                  ><input
+                    type="range"
+                    step="1"
+                    [min]="-circleRange().x"
+                    [max]="circleRange().x"
+                    [value]="circle().x"
+                    (input)="editCircle({ x: value($event) })"
+                /></label>
+                <label class="range-label"
+                  >{{ t("scene.vertical") }}
+                  <span>{{ round(circle().y) }} px</span
+                  ><input
+                    type="range"
+                    step="1"
+                    [min]="-circleRange().y"
+                    [max]="circleRange().y"
+                    [value]="circle().y"
+                    (input)="editCircle({ y: value($event) })"
+                /></label>
+                <label class="range-label"
+                  >{{ t("scene.diameter") }}
+                  <span>{{ round(circle().diameter) }} px</span
+                  ><input
+                    type="range"
+                    step="1"
+                    min="0"
+                    [max]="circleRange().diameter"
+                    [value]="circle().diameter"
+                    (input)="editCircle({ diameter: value($event) })"
+                /></label>
+                <div class="circle-style">
+                  <label class="check"
+                    ><input
+                      type="checkbox"
+                      [checked]="circle().visible"
+                      (change)="editCircle({ visible: checked($event) })"
+                    />{{ t("field.visible") }}</label
+                  ><label
+                    >{{ t("scene.colour")
+                    }}<input
+                      type="color"
+                      [value]="circle().color"
+                      (input)="
+                        editCircle({ color: $any($event.target).value })
+                      "
+                  /></label>
+                </div>
+              </section>
+            </div>
+            <p class="muted small-text scene-hint">{{ t("scene.hint") }}</p>
             <form [formGroup]="geometry" (ngSubmit)="applyGeometry()">
               <div class="panel-title geometry-title">
                 <h2>{{ t("panel.geometry") }}</h2>
