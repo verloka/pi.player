@@ -39,6 +39,11 @@ try {
   dotnet test PiPlayer.sln -c Release --logger 'trx;LogFileName=backend.trx' --results-directory artifacts/test-results; Check-Exit 'backend tests'
   dotnet publish src/PiPlayer.Server/PiPlayer.Server.csproj -c Release -r linux-arm64 --self-contained true -p:PublishTrimmed=false -o $releaseRoot; Check-Exit 'ARM64 publish'
   Copy-Item -LiteralPath scripts -Destination $releaseRoot -Recurse
+  # A Windows checkout may hold CRLF, and bash on the Pi then fails on "bash\r" in the shebang. Ship LF only.
+  foreach ($script in Get-ChildItem -LiteralPath (Join-Path $releaseRoot 'scripts') -File -Recurse | Where-Object { $_.Extension -in @('.sh','.py') }) {
+    $text = [IO.File]::ReadAllText($script.FullName)
+    if ($text.Contains("`r")) { [IO.File]::WriteAllText($script.FullName, $text.Replace("`r`n", "`n"), [Text.UTF8Encoding]::new($false)) }
+  }
   Copy-Item -LiteralPath docs -Destination $releaseRoot -Recurse
   Copy-Item -LiteralPath README.md,IMPLEMENTATION-STATUS.md -Destination $releaseRoot
   # Runtime data, credentials, browser profiles and development configuration never enter releases.

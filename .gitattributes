@@ -1,0 +1,4 @@
+# Scripts run on the Raspberry Pi. A Windows checkout with core.autocrlf=true would otherwise write them with
+# CRLF, and bash then fails on the shebang ("env: 'bash\r'"), so the kiosk never starts.
+*.sh text eol=lf
+*.py text eol=lf

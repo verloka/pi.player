@@ -33,9 +33,12 @@ group=$(id -gn "$user")
 install -d /etc/systemd/system/pi-player.service.d
 printf '[Service]\nUser=%s\nGroup=%s\nEnvironment=XDG_RUNTIME_DIR=/run/user/%s\nProtectHome=read-only\n' \
   "$user" "$group" "$(id -u "$user")" >/etc/systemd/system/pi-player.service.d/20-desktop-user.conf
+# Stop first: a running service flushes runtime-state.json on shutdown, and a file it rewrites after the chown
+# would stay owned by the old account (mode 600), leaving the new one unable to start and the kiosk waiting.
+systemctl stop pi-player.service
 chown -R "$user:$group" "$data"
 systemctl daemon-reload
-systemctl restart pi-player.service
+systemctl start pi-player.service
 if [[ -n $sink ]]; then
   [[ $sink =~ ^[0-9]+$ ]] || { echo 'Sink must be a numeric wpctl ID.' >&2; exit 1; }
   runuser -u "$user" -- env XDG_RUNTIME_DIR="/run/user/$(id -u "$user")" wpctl set-default "$sink"
