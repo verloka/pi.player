@@ -76,5 +76,6 @@ Every row below is **notRun**. Replace a status with `passed`, `failed`, `blocke
 | HW-31 | The circle is drawn above the background and below the video, at the position and diameter set by its sliders | notRun |
 | HW-32 | Captions stay off on the device across a whole playlist | notRun |
 | HW-33 | Cold boot and watchdog restart without keyring, camera portal, translation, permission or restore-tabs dialogs; video and audio play without local input | notRun |
+| HW-34 | After `configure-kiosk.sh` runs the service as the desktop user, dashboard −/+ and mute change the Pi's output as `wpctl get-volume @DEFAULT_AUDIO_SINK@` reports it, and the temperature matches `vcgencmd measure_temp` | notRun |
 
 For HW-27 record local muted video, local audible video, local audio, YouTube muted, YouTube audible, and YouTube muted with local Audio separately. No result counts if it needed a local click on the Pi: the device has no input devices, so the picture must arrive on its own.

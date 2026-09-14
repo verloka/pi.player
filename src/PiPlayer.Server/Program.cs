@@ -15,7 +15,7 @@ builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = options.MaxV
 builder.Services.ConfigureHttpJsonOptions(o => { o.SerializerOptions.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow; o.SerializerOptions.RespectRequiredConstructorParameters = true; });
 builder.Services.AddSingleton(options); builder.Services.AddSingleton(paths);
 builder.Services.AddSingleton<JsonStore>(); builder.Services.AddSingleton<MediaLibrary>(); builder.Services.AddSingleton<DependencyCoordinator>();
-builder.Services.AddSingleton<ScreenSessions>(); builder.Services.AddSingleton<Runtime>();
+builder.Services.AddSingleton<ScreenSessions>(); builder.Services.AddSingleton<Runtime>(); builder.Services.AddSingleton(new DeviceControl());
 builder.Services.AddHostedService(p => p.GetRequiredService<Runtime>());
 // Open appliance: no accounts, no login, no CSRF. Reachability is bounded by Urls/AllowedHosts and the LAN firewall.
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod().WithExposedHeaders("ETag")));
@@ -51,10 +51,10 @@ app.MapGet("/api/system/health", () => new { alive = true });
 app.MapGet("/api/system/ready", (Runtime r) => r.Ready ? Results.Ok(new { ready = true }) : Results.Json(new { ready = false, code = r.InitializationError }, statusCode: 503));
 app.MapGet("/api/system/state", (Runtime r) => r.Snapshot());
 app.MapGet("/api/system/info", (Runtime r) => new { name = "PiPlayer", version = "2.1.0", runtime = Environment.Version.ToString(), hostname = Environment.MachineName, r.Ready, options.MaxVideoUploadBytes, options.MaxAudioUploadBytes, options.RemoteRetrySeconds, options.RemoteRetryBudgetSeconds, options.EnableExperimentalYouTubeRotation });
-app.MapGet("/api/system/diagnostics", async (Runtime r, ScreenSessions s, JsonStore store) =>
+app.MapGet("/api/system/diagnostics", async (Runtime r, ScreenSessions s, JsonStore store, DeviceControl device) =>
 {
     var state = await r.Snapshot(); var playback = PlaybackReportSummary.Summarize(state);
-    return new { version = "2.1.0", runtime = Environment.Version.ToString(), freeBytes = paths.FreeBytes, r.Ready, r.InitializationError, screen = s.Status, persistence = state.Persistence, playback.PlaybackStalled, playback.SoundWaitingForGesture, playback.Channels, warnings = store.Warnings.ToArray() };
+    return new { version = "2.1.0", runtime = Environment.Version.ToString(), freeBytes = paths.FreeBytes, r.Ready, r.InitializationError, screen = s.Status, persistence = state.Persistence, playback.PlaybackStalled, playback.SoundWaitingForGesture, playback.Channels, device = await device.Status(), warnings = store.Warnings.ToArray() };
 });
 app.MapGet("/api/system/kiosk-status", async (Runtime r, ScreenSessions s) =>
 {
@@ -70,6 +70,9 @@ app.MapGet("/media/silence.wav", (HttpResponse response) =>
 });
 app.MapPost("/api/commands", (CommandEnvelope command, HttpContext c, Runtime r, CancellationToken ct) => r.Dispatch(command, Client.Id(c), ct));
 app.MapPost("/api/sources/youtube/normalize", (YouTubeRequest body) => Results.Json(Validate.YouTube(body.Url, body.VideoOnly), Json.Options));
+// The Pi's own output volume (wpctl) and temperature (vcgencmd).
+app.MapGet("/api/device", (DeviceControl device) => device.Status());
+app.MapPost("/api/device/audio", (DeviceAudioRequest body, DeviceControl device) => device.Change(body));
 app.MapCatalog();
 app.MapMethods("/media/{kind}/{id}", ["GET", "HEAD"], async (string kind, string id, HttpResponse response, MediaLibrary library, CancellationToken ct) =>
 {

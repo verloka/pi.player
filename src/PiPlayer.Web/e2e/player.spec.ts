@@ -1,11 +1,19 @@
 import { test, expect, BrowserContext, Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
-// The appliance has no accounts: opening /admin is the whole entry sequence.
-async function open(page: Page) {
-  await page.goto("/admin");
+// The appliance has no accounts: opening /admin is the whole entry sequence. It lands on the dashboard;
+// the geometry editor these specs drive is on the Studio tab.
+async function studio(page: Page) {
+  await page.getByRole("button", { name: "Studio", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Scene control" }),
   ).toBeVisible();
+}
+async function open(page: Page) {
+  await page.goto("/admin");
+  await expect(
+    page.getByRole("heading", { name: "Quick control" }),
+  ).toBeVisible();
+  await studio(page);
 }
 async function request(
   context: BrowserContext,
@@ -218,9 +226,7 @@ test("real Chromium: upload, transform 100/20/33, independent sound, pause, seek
     startup.documentRevision,
   );
   await page.reload();
-  await expect(
-    page.getByRole("heading", { name: "Scene control" }),
-  ).toBeVisible();
+  await studio(page);
   expect(
     await screen
       .locator("video")

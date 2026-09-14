@@ -148,6 +148,13 @@ export interface StateEnvelope {
   warnings: string[];
   enableExperimentalYouTubeRotation: boolean;
 }
+/** The Pi's own output volume (wpctl) and temperature (vcgencmd). volumePercent is null when wpctl failed. */
+export interface DeviceStatus {
+  volumePercent: number | null;
+  muted: boolean | null;
+  temperatureCelsius: number | null;
+  error: string | null;
+}
 export interface Command {
   commandId: string;
   target: Target;

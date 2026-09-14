@@ -22,8 +22,8 @@
       }}
     </div>
     <label class="language"
-      >{{ t("app.language")
-      }}<select
+      ><span class="language-label">{{ t("app.language") }}</span
+      ><select
         [value]="i18n.locale()"
         (change)="use($any($event.target).value)"
       >
@@ -38,7 +38,12 @@
     </button>
   </header>
   <nav class="tabs" [attr.aria-label]="t('nav.sections')">
-    <button [class.active]="tab() === 'studio'" (click)="tab.set('studio')">
+    <button
+      [class.active]="tab() === 'dashboard'"
+      (click)="tab.set('dashboard')"
+    >
+      {{ t("tab.dashboard") }}</button
+    ><button [class.active]="tab() === 'studio'" (click)="tab.set('studio')">
       {{ t("tab.studio") }}</button
     ><button
       [class.active]="tab() === 'libraries'"
@@ -56,7 +61,10 @@
       {{ t("tab.diagnostics") }}
     </button>
   </nav>
-  <main class="workspace">
+  <main
+    class="workspace"
+    [class.with-dock]="tab() === 'dashboard' && !!realtime.state()"
+  >
     @if (error()) {
       <div class="error banner" role="alert">
         {{ error()
@@ -69,37 +77,44 @@
         </button>
       </div>
     }
-    @if (notice()) {
+    @if (notice() && tab() !== "dashboard") {
       <div class="notice" role="status">{{ notice() }}</div>
     }
     @if (realtime.state(); as state) {
-      <div class="page-heading">
-        <div>
-          <p class="eyebrow">{{ t("brand.eyebrow") }}</p>
-          <h1>
+      @if (tab() !== "dashboard") {
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">{{ t("brand.eyebrow") }}</p>
+            <h1>
+              {{
+                tab() === "dashboard"
+                  ? t("page.dashboard")
+                  : tab() === "studio"
+                    ? t("page.studio")
+                    : tab() === "libraries"
+                      ? t("page.libraries")
+                      : tab() === "presets"
+                        ? t("page.presets")
+                        : tab() === "startup"
+                          ? t("page.startup")
+                          : t("page.diagnostics")
+              }}
+            </h1>
+          </div>
+          <div
+            class="save-state"
+            [class.error]="state.persistence === 'failed'"
+          >
             {{
-              tab() === "studio"
-                ? t("page.studio")
-                : tab() === "libraries"
-                  ? t("page.libraries")
-                  : tab() === "presets"
-                    ? t("page.presets")
-                    : tab() === "startup"
-                      ? t("page.startup")
-                      : t("page.diagnostics")
-            }}
-          </h1>
+              state.persistence === "saved"
+                ? t("persistence.saved")
+                : state.persistence === "pending"
+                  ? t("persistence.pending")
+                  : t("persistence.failed")
+            }}<small>Revision {{ state.revision }}</small>
+          </div>
         </div>
-        <div class="save-state" [class.error]="state.persistence === 'failed'">
-          {{
-            state.persistence === "saved"
-              ? t("persistence.saved")
-              : state.persistence === "pending"
-                ? t("persistence.pending")
-                : t("persistence.failed")
-          }}<small>Revision {{ state.revision }}</small>
-        </div>
-      </div>
+      }
       @if (bothAudible()) {
         <p class="warning">
           {{ t("warning.bothAudible") }}
@@ -111,65 +126,386 @@
       ) {
         <p class="warning">{{ t("warning.transparentAudible") }}</p>
       }
-      <section
-        class="channel-overview"
-        [attr.aria-label]="t('channel.overview')"
-      >
-        @for (target of ["visual", "audio"]; track target) {
-          @let isVisual = target === "visual";
-          @let channel = isVisual ? state.desired.visual : state.desired.audio;
-          @let observed =
-            isVisual ? state.observed.visual : state.observed.audio;
-          <article class="status-card">
-            <div class="status-icon">{{ isVisual ? "▣" : "♫" }}</div>
-            <div>
-              <p class="eyebrow">{{ target }}</p>
-              <strong>{{ label(channel.source) }}</strong>
-              <p class="muted">
-                {{ t("channel.requested") }} {{ channel.transport }}
-                <span class="separator">→</span> {{ t("channel.actual") }}
-                <span class="actual">{{
-                  observed?.status ?? t("channel.unconfirmed")
-                }}</span>
-              </p>
-              <small
-                >{{
-                  observed?.capabilities?.isLive
-                    ? "LIVE"
-                    : (observed?.positionSeconds ?? 0 | number: "1.0-1") +
-                      " / " +
-                      (observed?.durationSeconds ?? 0 | number: "1.0-1") +
-                      t("unit.seconds")
-                }}
-                ·
-                {{
-                  channel.playback.muted
-                    ? "Muted"
-                    : channel.playback.volume + "%"
-                }}</small
-              >
-              @if (observed?.error; as failure) {
-                <p class="error">
-                  {{ playbackMessage(failure) }} [{{ failure.code }}]
+      @if (tab() !== "dashboard") {
+        <section
+          class="channel-overview"
+          [attr.aria-label]="t('channel.overview')"
+        >
+          @for (target of ["visual", "audio"]; track target) {
+            @let isVisual = target === "visual";
+            @let channel =
+              isVisual ? state.desired.visual : state.desired.audio;
+            @let observed =
+              isVisual ? state.observed.visual : state.observed.audio;
+            <article class="status-card">
+              <div class="status-icon">{{ isVisual ? "▣" : "♫" }}</div>
+              <div>
+                <p class="eyebrow">{{ target }}</p>
+                <strong>{{ label(channel.source) }}</strong>
+                <p class="muted">
+                  {{ t("channel.requested") }} {{ channel.transport }}
+                  <span class="separator">→</span> {{ t("channel.actual") }}
+                  <span class="actual">{{
+                    observed?.status ?? t("channel.unconfirmed")
+                  }}</span>
                 </p>
+                <small
+                  >{{
+                    observed?.capabilities?.isLive
+                      ? "LIVE"
+                      : (observed?.positionSeconds ?? 0 | number: "1.0-1") +
+                        " / " +
+                        (observed?.durationSeconds ?? 0 | number: "1.0-1") +
+                        t("unit.seconds")
+                  }}
+                  ·
+                  {{
+                    channel.playback.muted
+                      ? "Muted"
+                      : channel.playback.volume + "%"
+                  }}</small
+                >
+                @if (observed?.error; as failure) {
+                  <p class="error">
+                    {{ playbackMessage(failure) }} [{{ failure.code }}]
+                  </p>
+                }
+              </div>
+              <div class="mini-transport">
+                <button
+                  (click)="command(isVisual ? 'visual' : 'audio', 'play')"
+                  [attr.aria-label]="'Play ' + target"
+                >
+                  ▶</button
+                ><button
+                  (click)="command(isVisual ? 'visual' : 'audio', 'pause')"
+                  [attr.aria-label]="'Pause ' + target"
+                >
+                  Ⅱ
+                </button>
+              </div>
+            </article>
+          }
+        </section>
+      }
+      @if (tab() === "dashboard") {
+        @let active = activePresets();
+        <div class="dash">
+          <div class="dash-strip">
+            <h1 class="sr-only">{{ t("page.dashboard") }}</h1>
+            <span
+              class="chip"
+              [class.chip-ok]="state.screen.connected"
+              [class.chip-bad]="!state.screen.connected"
+              ><span class="chip-dot"></span
+              >{{
+                state.screen.connected
+                  ? t("dashboard.screenOnline")
+                  : t("dashboard.screenOffline")
+              }}</span
+            >
+            <span
+              class="chip chip-temp"
+              [attr.data-level]="temperatureLevel()"
+              [attr.title]="t('dashboard.temperature')"
+            >
+              <svg class="chip-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M14 14.76V5a2 2 0 0 0-4 0v9.76a4 4 0 1 0 4 0z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                />
+              </svg>
+              @if (device()?.temperatureCelsius != null) {
+                {{ device()!.temperatureCelsius | number: "1.1-1" }} °C ·
+                {{ t("dashboard.temp." + temperatureLevel()) }}
+              } @else {
+                {{ t("dashboard.temp.unknown") }}
+              }
+            </span>
+            @if (state.persistence === "failed") {
+              <span class="chip chip-bad">{{ t("persistence.failed") }}</span>
+            }
+          </div>
+          @if (deviceError() || device()?.error; as message) {
+            <!-- One line until opened: on the Pi this appears only until configure-kiosk.sh has run. -->
+            <details class="device-warning">
+              <summary>{{ t("dashboard.volumeUnavailable") }}</summary>
+              <p>{{ message }}</p>
+              <p>{{ t("dashboard.deviceHint") }}</p>
+            </details>
+          }
+          <div class="deck">
+            @for (target of channels; track target) {
+              @let channel = state.desired[target];
+              @let observed = state.observed[target];
+              @let playing = channel.transport === "playing";
+              @let mode = channelState(target);
+              @let preset = active[target];
+              @let percent = progress(target);
+              @let name =
+                target === "visual"
+                  ? t("dashboard.video")
+                  : t("dashboard.audio");
+              <article
+                class="now"
+                [class.now-audio]="target === 'audio'"
+                [class.is-playing]="mode === 'playing' || mode === 'starting'"
+              >
+                <button
+                  type="button"
+                  class="now-toggle"
+                  [class.primary]="!playing"
+                  [disabled]="!channel.source"
+                  [attr.aria-label]="
+                    (playing ? t('dashboard.pause') : t('dashboard.play')) +
+                    ': ' +
+                    name
+                  "
+                  [attr.aria-busy]="pendingAction() === target"
+                  (click)="toggle(target)"
+                >
+                  @if (playing) {
+                    <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="6" y="4" width="4" height="16" rx="1" />
+                      <rect x="14" y="4" width="4" height="16" rx="1" />
+                    </svg>
+                  } @else {
+                    <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  }
+                </button>
+                <div class="now-body">
+                  <div class="now-head">
+                    <span class="eyebrow">{{ name }}</span>
+                    <span class="state-pill" [attr.data-state]="mode">{{
+                      t("dashboard.state." + mode)
+                    }}</span>
+                  </div>
+                  <strong class="now-title">{{
+                    preset?.name ?? label(channel.source)
+                  }}</strong>
+                  <small class="now-meta">
+                    @if (preset) {
+                      {{ label(channel.source) }} ·
+                    }
+                    @if (observed?.capabilities?.isLive) {
+                      LIVE
+                    } @else if (channel.source) {
+                      {{ clock(observed?.positionSeconds) }}
+                      @if (observed?.durationSeconds) {
+                        / {{ clock(observed?.durationSeconds) }}
+                      }
+                    }
+                  </small>
+                  <div class="now-progress" [class.is-empty]="percent === null">
+                    <span [style.width.%]="percent ?? 0"></span>
+                  </div>
+                  @if (observed?.error; as failure) {
+                    <p class="error small-text">
+                      {{ playbackMessage(failure) }}
+                    </p>
+                  }
+                </div>
+              </article>
+            }
+            <div
+              class="preset-switch"
+              role="group"
+              [attr.aria-label]="t('dashboard.presets')"
+            >
+              @for (kind of channels; track kind) {
+                <button
+                  type="button"
+                  [class.active]="presetChannel() === kind"
+                  [attr.aria-pressed]="presetChannel() === kind"
+                  (click)="presetChannel.set(kind)"
+                >
+                  {{
+                    kind === "visual"
+                      ? t("dashboard.videoPresets")
+                      : t("dashboard.audioPresets")
+                  }}
+                </button>
               }
             </div>
-            <div class="mini-transport">
+            @for (kind of channels; track kind) {
+              @let presets =
+                kind === "visual"
+                  ? visualPresets()?.items
+                  : audioPresets()?.items;
+              @let title =
+                kind === "visual"
+                  ? t("dashboard.videoPresets")
+                  : t("dashboard.audioPresets");
+              <section
+                class="preset-list"
+                [class.preset-list-audio]="kind === 'audio'"
+                [class.picked]="presetChannel() === kind"
+                [attr.aria-label]="title"
+              >
+                <h2 class="preset-list-title">{{ title }}</h2>
+                @for (item of presets ?? []; track item.id) {
+                  @let on = item.id === active[kind]?.id;
+                  <button
+                    type="button"
+                    class="preset-option"
+                    [class.active]="on"
+                    [attr.aria-busy]="pendingAction() === item.id"
+                    (click)="quickPreset(kind, item.id)"
+                  >
+                    <span class="option-icon" aria-hidden="true">
+                      @if (on) {
+                        <svg class="glyph" viewBox="0 0 24 24">
+                          <rect x="4" y="10" width="3.5" height="10" rx="1" />
+                          <rect
+                            x="10.25"
+                            y="4"
+                            width="3.5"
+                            height="16"
+                            rx="1"
+                          />
+                          <rect x="16.5" y="13" width="3.5" height="7" rx="1" />
+                        </svg>
+                      } @else {
+                        <svg class="glyph" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      }
+                    </span>
+                    <span class="option-text"
+                      ><strong>{{ item.name }}</strong
+                      ><small>{{ label(item.source) }}</small></span
+                    >
+                    @if (pendingAction() === item.id) {
+                      <span class="tile-badge">{{
+                        t("dashboard.applying")
+                      }}</span>
+                    } @else if (on) {
+                      <span class="tile-badge">{{
+                        t("dashboard.onScreen")
+                      }}</span>
+                    }
+                  </button>
+                } @empty {
+                  <p class="muted small-text preset-empty">
+                    {{ t("dashboard.noPresets") }}
+                    <button
+                      type="button"
+                      class="quiet"
+                      (click)="tab.set('presets')"
+                    >
+                      {{ t("tab.presets") }} →
+                    </button>
+                  </p>
+                }
+              </section>
+            }
+          </div>
+          <div
+            class="dock"
+            role="region"
+            [attr.aria-label]="t('dashboard.remote')"
+          >
+            <div class="dock-inner">
               <button
-                (click)="command(isVisual ? 'visual' : 'audio', 'play')"
-                [attr.aria-label]="'Play ' + target"
+                type="button"
+                class="dock-all"
+                [class.primary]="!anyPlaying()"
+                [disabled]="!anyPlaying() && !anyPlayable()"
+                [attr.aria-busy]="pendingAction() === 'all'"
+                (click)="toggleAll()"
               >
-                ▶</button
-              ><button
-                (click)="command(isVisual ? 'visual' : 'audio', 'pause')"
-                [attr.aria-label]="'Pause ' + target"
+                @if (anyPlaying()) {
+                  <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="6" y="4" width="4" height="16" rx="1" />
+                    <rect x="14" y="4" width="4" height="16" rx="1" />
+                  </svg>
+                  {{ t("dashboard.pauseAll") }}
+                } @else {
+                  <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  {{ t("dashboard.playAll") }}
+                }
+              </button>
+              <div class="dock-volume">
+                <span class="dock-caption">{{ t("dashboard.volume") }}</span>
+                <button
+                  type="button"
+                  class="dock-step"
+                  [disabled]="deviceVolume() === null || deviceVolume() === 0"
+                  [attr.aria-label]="t('dashboard.volumeDown')"
+                  (click)="stepVolume(-1)"
+                >
+                  −
+                </button>
+                <input
+                  type="range"
+                  class="dock-slider"
+                  min="0"
+                  max="100"
+                  step="1"
+                  [attr.aria-label]="t('dashboard.volume')"
+                  [value]="deviceVolume() ?? 0"
+                  [disabled]="deviceVolume() === null"
+                  (input)="volumeDraft.set(value($event))"
+                  (change)="changeVolume(value($event))"
+                />
+                <button
+                  type="button"
+                  class="dock-step"
+                  [disabled]="deviceVolume() === null || deviceVolume() === 100"
+                  [attr.aria-label]="t('dashboard.volumeUp')"
+                  (click)="stepVolume(1)"
+                >
+                  +
+                </button>
+                <output class="dock-value" [class.is-muted]="device()?.muted"
+                  >{{ deviceVolume() ?? "—" }}%</output
+                >
+              </div>
+              <button
+                type="button"
+                class="dock-mute"
+                [class.active]="device()?.muted"
+                [disabled]="device()?.muted == null"
+                [attr.aria-pressed]="device()?.muted === true"
+                [attr.aria-label]="
+                  device()?.muted ? t('dashboard.unmute') : t('dashboard.mute')
+                "
+                (click)="toggleMute()"
               >
-                Ⅱ
+                @if (device()?.muted) {
+                  <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 9v6h4l5 4V5L7 9H3z" />
+                    <path
+                      d="M16 9l5 6M21 9l-5 6"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                } @else {
+                  <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 9v6h4l5 4V5L7 9H3z" />
+                    <path
+                      d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                }
               </button>
             </div>
-          </article>
-        }
-      </section>
+          </div>
+        </div>
+      }
       @if (tab() === "studio") {
         <div class="studio-grid">
           <section class="panel preview-panel">

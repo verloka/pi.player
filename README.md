@@ -99,6 +99,10 @@ Default data: `/opt/pi-player/data`. Machine settings: `/opt/pi-player/appsettin
 
 Open **http://192.168.68.122:5000/admin**. The language switch is in the top bar.
 
+The panel opens on the **Dashboard**, laid out for a phone. It has a large pause/play button for each channel, **Pause everything**, video and audio presets that start with one tap (the one on screen is marked), the Pi's own output volume (−/+, slider, mute) and the processor temperature. The other tabs hold the detailed settings.
+
+The backend sets the device volume by running `wpctl set-volume @DEFAULT_AUDIO_SINK@ N%` itself and reads the temperature with `vcgencmd measure_temp`. wpctl reaches the desktop session's PipeWire only as that session's user, so `configure-kiosk.sh` runs the service as the desktop user; `NoNewPrivileges` stays on, so that user's sudo rights never apply to the service. On a Pi configured before this change, run it once more after deploying: `sudo bash /opt/pi-player/current/scripts/configure-kiosk.sh verloka`.
+
 1. **Libraries:** upload video (MP4, WebM) or audio (MP3, WAV, OGG, M4A, FLAC). Playback depends on Chromium's codec support.
 2. **Studio → Visual:** select a library video or paste a YouTube URL, then click **Select and play**. **Load paused** prepares it without starting playback.
 3. **Position and size:** drag the frame on the schematic, resize with the bottom-right grip, and rotate with the top grip. Hold Shift to rotate in 15° steps. The **Video** sliders move the frame, scale it and turn it about its own centre, and **Reset** puts it back in the middle, upright and at 100%. After a click on the schematic, the arrow keys move the frame by 1 px, or 10 px with Shift. For exact values, enter coordinates, dimensions and angle, then click **Apply geometry**.

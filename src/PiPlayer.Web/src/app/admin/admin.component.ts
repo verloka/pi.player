@@ -18,6 +18,7 @@ import {
   Command,
   defaultCircle,
   defaultTransform,
+  DeviceStatus,
   Receipt,
   Source,
   Startup,
@@ -99,7 +100,7 @@ export class AdminComponent implements OnInit, OnDestroy {
   readonly booting = signal(true);
   readonly error = signal("");
   readonly notice = signal("");
-  readonly tab = signal("studio");
+  readonly tab = signal("dashboard");
   readonly busy = signal(false);
   readonly uploadProgress = signal<number | null>(null);
   readonly diagnostics = signal<unknown>(null);
@@ -108,6 +109,58 @@ export class AdminComponent implements OnInit, OnDestroy {
   readonly visualPresets = signal<Collection<VisualPreset> | null>(null);
   readonly audioPresets = signal<Collection<AudioPreset> | null>(null);
   readonly startup = signal<Startup | null>(null);
+  readonly channels = ["visual", "audio"] as const;
+  readonly device = signal<DeviceStatus | null>(null);
+  readonly deviceError = signal("");
+  /** A volume on its way to the device, shown until the device confirms it. */
+  readonly volumeDraft = signal<number | null>(null);
+  readonly deviceVolume = computed(
+    () => this.volumeDraft() ?? this.device()?.volumePercent ?? null,
+  );
+  readonly temperatureLevel = computed(() => {
+    const celsius = this.device()?.temperatureCelsius;
+    if (celsius == null) return "unknown";
+    return celsius >= 80 ? "hot" : celsius >= 65 ? "warm" : "normal";
+  });
+  /** The dashboard action on its way (a channel, "all" or a preset id), so a double tap does not repeat it. */
+  readonly pendingAction = signal<string | null>(null);
+  readonly anyPlaying = computed(() => {
+    const d = this.realtime.state()?.desired;
+    return (
+      !!d &&
+      this.channels.some((c) => !!d[c].source && d[c].transport === "playing")
+    );
+  });
+  readonly anyPlayable = computed(() => {
+    const d = this.realtime.state()?.desired;
+    return (
+      !!d &&
+      this.channels.some((c) => !!d[c].source && d[c].transport !== "playing")
+    );
+  });
+  /** A preset counts as on screen while the scene still matches it: its source and, for video, its geometry. */
+  readonly activePresets = computed(() => {
+    const d = this.realtime.state()?.desired;
+    const same = (a: unknown, b: unknown) =>
+      JSON.stringify(a) === JSON.stringify(b);
+    return {
+      visual: d
+        ? (this.visualPresets()?.items.find(
+            (p) =>
+              !!p.source &&
+              same(p.source, d.visual.source) &&
+              same(p.transform, d.visual.transform),
+          ) ?? null)
+        : null,
+      audio: d
+        ? (this.audioPresets()?.items.find(
+            (p) => !!p.source && same(p.source, d.audio.source),
+          ) ?? null)
+        : null,
+    };
+  });
+  /** Which channel's presets a phone lists; wider screens show both side by side. */
+  readonly presetChannel = signal<"visual" | "audio">("visual");
   readonly previewTransform = signal<Transform>({ ...defaultTransform });
   readonly viewport = computed<Viewport | null>(
     () => this.realtime.state()?.screen.descriptor?.viewport ?? null,
@@ -246,6 +299,10 @@ export class AdminComponent implements OnInit, OnDestroy {
   private circleSending = false;
   /** The newest revision this panel's own live commands produced; pushed state may still lag behind it. */
   private ownRevision = { instance: "", revision: -1 };
+  private devicePending: { volumePercent?: number; muted?: boolean } | null =
+    null;
+  private deviceSending = false;
+  private devicePoll?: ReturnType<typeof setInterval>;
   private geometrySubscription = this.geometry.valueChanges.subscribe(() => {
     const next = this.transform();
     const previous = this.previewTransform();
@@ -293,6 +350,16 @@ export class AdminComponent implements OnInit, OnDestroy {
     });
   }
   async ngOnInit(): Promise<void> {
+    // Temperature and volume change on the device itself, so the open dashboard keeps asking.
+    this.devicePoll = setInterval(() => {
+      if (
+        this.tab() === "dashboard" &&
+        document.visibilityState === "visible" &&
+        !this.deviceSending
+      )
+        void this.refreshDevice();
+    }, 5000);
+    void this.refreshDevice();
     try {
       await this.initialize();
     } catch (e) {
@@ -951,7 +1018,149 @@ export class AdminComponent implements OnInit, OnDestroy {
       this.diagnostics.set(await this.api.get("/api/system/diagnostics")),
     );
   }
+  /** Pauses or resumes one channel. "play" also restarts a stopped or finished source. */
+  async toggle(target: "visual" | "audio"): Promise<void> {
+    const channel = this.realtime.state()?.desired[target];
+    if (!channel?.source || this.pendingAction()) return;
+    this.pendingAction.set(target);
+    try {
+      await this.command(
+        target,
+        channel.transport === "playing" ? "pause" : "play",
+      );
+    } finally {
+      this.pendingAction.set(null);
+    }
+  }
+  /** One button for the whole scene: pauses whatever plays, otherwise resumes everything that has a source. */
+  async toggleAll(): Promise<void> {
+    if (this.pendingAction()) return;
+    const pause = this.anyPlaying();
+    this.pendingAction.set("all");
+    try {
+      for (const target of this.channels) {
+        const channel = this.realtime.state()?.desired[target];
+        if (!channel?.source || (channel.transport === "playing") !== pause)
+          continue;
+        await this.command(target, pause ? "pause" : "play");
+        if (this.error()) break;
+      }
+    } finally {
+      this.pendingAction.set(null);
+    }
+  }
+  async quickPreset(kind: "visual" | "audio", id: string): Promise<void> {
+    if (this.pendingAction()) return;
+    this.pendingAction.set(id);
+    try {
+      await this.applyPreset(kind, id, true);
+    } finally {
+      this.pendingAction.set(null);
+    }
+  }
+  /** What a channel is doing, as the dashboard names it. */
+  channelState(
+    target: "visual" | "audio",
+  ): "noSource" | "failed" | "starting" | "playing" | "paused" | "stopped" {
+    const state = this.realtime.state();
+    const channel = state?.desired[target];
+    const observed = state?.observed[target];
+    if (!channel?.source) return "noSource";
+    if (observed?.status === "error" || observed?.status === "blocked")
+      return "failed";
+    if (channel.transport !== "playing") return channel.transport;
+    // Without a screen nothing can confirm playback, and "starting" would never end.
+    return !state?.screen.connected || observed?.status === "playing"
+      ? "playing"
+      : "starting";
+  }
+  /** How far the channel has played, 0–100, or null for live streams and unknown lengths. */
+  progress(target: "visual" | "audio"): number | null {
+    const observed = this.realtime.state()?.observed[target];
+    if (!observed?.durationSeconds || observed.capabilities.isLive) return null;
+    return Math.min(
+      100,
+      (observed.positionSeconds / observed.durationSeconds) * 100,
+    );
+  }
+  /** m:ss, or h:mm:ss past an hour. */
+  clock(seconds: number | null | undefined): string {
+    const total = Math.max(0, Math.floor(seconds ?? 0));
+    const h = Math.floor(total / 3600),
+      m = Math.floor((total % 3600) / 60),
+      s = String(total % 60).padStart(2, "0");
+    return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+  }
+  async refreshDevice(): Promise<void> {
+    try {
+      const status = await this.api.get<DeviceStatus>("/api/device");
+      this.device.set(status);
+      if (!this.deviceSending) this.volumeDraft.set(null);
+    } catch {
+      this.device.set(null);
+    }
+  }
+  /** −/+ move to the next multiple of 5, so a volume of 33 goes to 30 or 35. */
+  stepVolume(direction: -1 | 1): void {
+    const current = this.deviceVolume();
+    if (current === null) return;
+    this.changeVolume(
+      direction > 0
+        ? Math.floor(current / 5) * 5 + 5
+        : Math.ceil(current / 5) * 5 - 5,
+    );
+  }
+  changeVolume(percent: number): void {
+    const volumePercent = Math.max(0, Math.min(100, Math.round(percent)));
+    this.volumeDraft.set(volumePercent);
+    this.sendDevice({ volumePercent });
+  }
+  toggleMute(): void {
+    const muted = this.device()?.muted;
+    if (muted != null) this.sendDevice({ muted: !muted });
+  }
+  /** One request at a time; a newer value replaces one still waiting, so repeated taps never pile up. */
+  private sendDevice(change: {
+    volumePercent?: number;
+    muted?: boolean;
+  }): void {
+    this.devicePending = { ...this.devicePending, ...change };
+    void this.flushDevice();
+  }
+  private async flushDevice(): Promise<void> {
+    if (this.deviceSending) return;
+    this.deviceSending = true;
+    this.deviceError.set("");
+    try {
+      while (this.devicePending) {
+        const body = this.devicePending;
+        this.devicePending = null;
+        this.device.set(
+          await this.api.request<DeviceStatus>(
+            "POST",
+            "/api/device/audio",
+            body,
+          ),
+        );
+      }
+    } catch (e) {
+      this.devicePending = null;
+      this.volumeDraft.set(null);
+      this.deviceError.set(
+        e instanceof ApiError
+          ? e.problem.title
+          : e instanceof Error
+            ? e.message
+            : this.t("error.unknown"),
+      );
+      void this.refreshDevice();
+    } finally {
+      this.deviceSending = false;
+      this.volumeDraft.set(null);
+    }
+  }
   ngOnDestroy(): void {
+    clearInterval(this.devicePoll);
     this.geometrySubscription.unsubscribe();
     this.uploadAbort?.abort();
     clearTimeout(this.drag?.timer);
