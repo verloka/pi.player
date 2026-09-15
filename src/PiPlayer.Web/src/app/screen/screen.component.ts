@@ -24,11 +24,12 @@ import { HtmlMediaAdapter } from "./adapters/html-media";
 import { YouTubeAdapter } from "./adapters/youtube";
 import { autoplayGate } from "./autoplay";
 import { ChannelRenderer } from "./reconciliation";
+import { VisualStage } from "./visual-stage";
 @Component({
   selector: "app-screen",
   template: `<div #root class="screen-root">
     <div #circle class="circle-layer"></div>
-    <div #visual class="visual-layer"></div>
+    <div #visual class="visual-stage"></div>
     <div #audio class="audio-layer" aria-hidden="true"></div>
     @if (needsGesture()) {
       <button type="button" class="unlock" (click)="unlock()">
@@ -44,7 +45,7 @@ import { ChannelRenderer } from "./reconciliation";
     ":host{display:block;width:100%;height:100%}",
     ".screen-root{position:fixed;inset:0;overflow:hidden;background:#000}",
     ".circle-layer{position:absolute;display:none;border-radius:50%;pointer-events:none}",
-    ".visual-layer{position:absolute;transform-origin:50% 50%}",
+    ".visual-stage{position:absolute;inset:0;pointer-events:none}",
     // Experimental YouTube audio uses its own off-screen player; keep a real viewport for the embed.
     ".audio-layer{position:fixed;left:-10000px;top:0;width:320px;height:200px;pointer-events:none}",
     // A signage screen must never be covered by a prompt nobody can dismiss: this is a corner banner.
@@ -64,6 +65,7 @@ export class ScreenComponent implements AfterViewInit, OnDestroy {
   private page = uuid();
   private unwatchGate?: () => void;
   private renderers!: { visual: ChannelRenderer; audio: ChannelRenderer };
+  private visualStage!: VisualStage;
   private lastAck = 0;
   private heartbeat?: ReturnType<typeof setInterval>;
   private telemetry?: ReturnType<typeof setInterval>;
@@ -86,11 +88,16 @@ export class ScreenComponent implements AfterViewInit, OnDestroy {
     private api: Api,
   ) {}
   async ngAfterViewInit(): Promise<void> {
+    this.visualStage = new VisualStage(
+      this.visual.nativeElement,
+      (source, host, changed) => this.factory(source, changed, host),
+    );
     this.renderers = {
       visual: new ChannelRenderer(
         "visual",
-        (s, changed) => this.factory(s, changed),
+        (s, changed) => this.visualStage.create(s, changed),
         (o) => this.report("visual", o),
+        this.visualStage,
       ),
       audio: new ChannelRenderer(
         "audio",
@@ -191,6 +198,7 @@ export class ScreenComponent implements AfterViewInit, OnDestroy {
     const v = state.desired.visual,
       t = v.transform;
     const element = this.visual.nativeElement;
+    this.visualStage.update(v);
     this.root.nativeElement.style.backgroundColor =
       state.desired.background.color;
     // Stacking follows the DOM order: the background, the circle above it, the video above both.
@@ -221,16 +229,6 @@ export class ScreenComponent implements AfterViewInit, OnDestroy {
         void this.visualWithoutPlayer(state, "blocked", invalid);
       } else {
         element.style.display = v.visible ? "block" : "none";
-        Object.assign(element.style, {
-          left: t.x + "px",
-          top: t.y + "px",
-          width: t.width + "px",
-          height: t.height + "px",
-          transform: `rotate(${t.rotation}deg) scale(${t.scale})`,
-          opacity: String(t.opacity),
-        });
-        const video = element.querySelector("video");
-        if (video) video.style.objectFit = t.objectFit;
         this.renderers.visual.setActive(true);
         void this.renderers.visual.reconcile(state);
       }
@@ -269,7 +267,11 @@ export class ScreenComponent implements AfterViewInit, OnDestroy {
       capabilities: capabilities(),
     });
   }
-  private factory(source: Source, changed: () => void) {
+  private factory(
+    source: Source,
+    changed: () => void,
+    visualHost: HTMLElement = this.visual.nativeElement,
+  ) {
     if (source.kind === "youtubeAudio")
       return new YouTubeAdapter(
         source,
@@ -280,7 +282,7 @@ export class ScreenComponent implements AfterViewInit, OnDestroy {
     if (source.kind === "youtubeVideo" || source.kind === "youtubePlaylist")
       return new YouTubeAdapter(
         source,
-        this.visual.nativeElement,
+        visualHost,
         changed,
         this.realtime.state()?.enableExperimentalYouTubeRotation ?? false,
       );
@@ -313,9 +315,9 @@ export class ScreenComponent implements AfterViewInit, OnDestroy {
     media.muted = playback?.muted ?? true;
     media.volume = (playback?.volume ?? 0) / 100;
     (source.kind === "localVideo"
-      ? this.visual
-      : this.audio
-    ).nativeElement.append(media);
+      ? visualHost
+      : this.audio.nativeElement
+    ).append(media);
     return new HtmlMediaAdapter(
       source,
       media,

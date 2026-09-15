@@ -325,7 +325,7 @@ test("a YouTube outage and a shrinking screen do not stop direct remote Audio", 
   await command(context, "audio", "setSource", {
     source: {
       kind: "remoteAudioUrl",
-      url: "http://localhost:5000/media/audio/" + asset.id,
+      url: new URL("/media/audio/" + asset.id, page.url()).href,
       streamMode: "file",
     },
     autoplay: true,

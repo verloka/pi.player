@@ -13,6 +13,14 @@ export type AdapterFactory = (
   source: Source,
   changed: () => void,
 ) => PlayerAdapter;
+/** Optional owner for visual layers retained during a source change. Audio stays immediate. */
+export interface ChannelPresentation {
+  replace(previous: PlayerAdapter | null, next: Source | null): void;
+  prepare(adapter: PlayerAdapter, channel: Channel): Channel;
+  present(adapter: PlayerAdapter, channel: Channel): Promise<void>;
+  suspend(): void;
+  dispose(): void;
+}
 export class ChannelRenderer {
   private adapter: PlayerAdapter | null = null;
   private sourceKey = "";
@@ -36,11 +44,15 @@ export class ChannelRenderer {
     private target: "visual" | "audio",
     private factory: AdapterFactory,
     private report: (state: Observed) => void,
+    private presentation?: ChannelPresentation,
   ) {}
   setActive(active: boolean): void {
     const changed = this.active !== active;
     this.active = active;
-    if (!active && changed) this.adapter?.suspend();
+    if (!active && changed) {
+      this.adapter?.suspend();
+      this.presentation?.suspend();
+    }
   }
   async reconcile(state: StateEnvelope): Promise<void> {
     const previous = this.latest;
@@ -58,7 +70,9 @@ export class ChannelRenderer {
     const newGeneration = channel.playbackGeneration !== this.generation;
     if (newSource) {
       const epoch = ++this.epoch;
-      this.adapter?.dispose();
+      if (this.presentation)
+        this.presentation.replace(this.adapter, channel.source);
+      else this.adapter?.dispose();
       this.adapter = null;
       this.sourceKey = key;
       this.instance = state.serverInstanceId;
@@ -175,7 +189,13 @@ export class ChannelRenderer {
         const adapter = this.adapter;
         const seek = this.needsPosition ? this.position : null;
         this.needsPosition = false;
-        await adapter.apply(channel, seek, this.playlistIndex);
+        await adapter.apply(
+          this.presentation?.prepare(adapter, channel) ?? channel,
+          seek,
+          this.playlistIndex,
+        );
+        if (epoch !== this.epoch || !this.active) return;
+        await this.presentation?.present(adapter, channel);
         if (epoch !== this.epoch || !this.active) return;
         this.lastAppliedRevision = state.revision;
         this.appliedGeneration = channel.playbackGeneration;
@@ -186,10 +206,12 @@ export class ChannelRenderer {
         // Carry the underlying reason: an operator with only SSH reads this out of diagnostics.
         const reason = error instanceof Error ? error.message : String(error);
         console.error("[piplayer] reconciliation failed", this.target, error);
-        this.failure = playbackError(
-          "reconciliationFailed",
-          "The player did not apply the configuration: " + reason,
-        );
+        this.failure =
+          this.adapter?.observation().error ??
+          playbackError(
+            "reconciliationFailed",
+            "The player did not apply the configuration: " + reason,
+          );
         this.emit();
       }
     } finally {
@@ -229,13 +251,15 @@ export class ChannelRenderer {
   }
   block(code: string, message: string): void {
     this.adapter?.suspend();
+    this.presentation?.suspend();
     this.failure = playbackError(code, message);
     this.emit();
   }
   dispose(): void {
     this.active = false;
     this.epoch++;
-    this.adapter?.dispose();
+    if (this.presentation) this.presentation.dispose();
+    else this.adapter?.dispose();
     this.adapter = null;
     this.sourceKey = "";
     this.ready = false;

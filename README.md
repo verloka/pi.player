@@ -116,6 +116,12 @@ The panel schematic shows the picture's position. Playback happens on `/screen`,
 
 The screen draws the background first, then a circle, then the video. The **Circle** sliders set its diameter and its offset from the centre of the screen, and **Reset** returns it to the centre. Its colour and visibility sit under the sliders. The circle is part of the current scene and is saved with visual presets.
 
+### Smooth video changes
+
+Selecting a preset with a different video keeps the current video on screen while the replacement loads. Local files wait for a decoded frame at the requested position; YouTube waits for its player to report playback. The picture then crossfades over 0.5 seconds, keeping each video's own size and position. Selecting another preset during loading cancels the pending replacement. A load failure leaves the previous video visible and reports the error in Diagnostics.
+
+The replacement prepares muted. At the handoff the old video pauses on its last frame and the new video's configured sound takes over. The independent Audio channel continues uninterrupted. Clear screen, hide, stop and loss of the screen session still take effect; old players are released after the fade. Loading briefly needs two video players, so use videos the Pi can decode comfortably. Changes to geometry or playback on the same source do not reload or crossfade it. Real YouTube transitions and Raspberry Pi performance require device acceptance.
+
 ### Experimental YouTube audio
 
 In **Studio → Audio**, choose **YouTube audio (experimental)**, paste a video URL and select **Select and play** or **Load paused**. Watch, short-link and Shorts URLs use the same validation as Visual. A playlist parameter is ignored; playlist-only URLs are rejected. Audio has its own play/pause, stop, restart, seek, volume, mute and loop, and can be saved in an audio preset or restored at startup.
