@@ -39,9 +39,11 @@ public record YouTubePlaylist(string PlaylistId, string? InitialVideoId = null) 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(LocalFile), "localFile")]
 [JsonDerivedType(typeof(RemoteAudioUrl), "remoteAudioUrl")]
+[JsonDerivedType(typeof(YouTubeAudio), "youtubeAudio")]
 public abstract record AudioSource;
 public record LocalFile(string AssetId) : AudioSource;
 public record RemoteAudioUrl(string Url, string StreamMode = "auto") : AudioSource;
+public record YouTubeAudio(string VideoId) : AudioSource;
 public record Transform(double X = 0, double Y = 0, double Width = 640, double Height = 360,
     double Scale = 1, double Rotation = 0, double Opacity = 1, string ObjectFit = "contain");
 public record Playback(bool Loop = false, bool Muted = false, double Volume = 50);

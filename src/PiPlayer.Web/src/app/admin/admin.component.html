@@ -1054,6 +1054,9 @@
                     <option value="remoteAudioUrl">
                       {{ t("option.remoteAudio") }}
                     </option>
+                    <option value="youtubeAudio">
+                      {{ t("option.youtubeAudio") }}
+                    </option>
                   </select></label
                 >
                 @if (audioSource.controls.kind.value === "localFile") {
@@ -1074,6 +1077,16 @@
                       }
                     </select></label
                   >
+                } @else if (
+                  audioSource.controls.kind.value === "youtubeAudio"
+                ) {
+                  <label
+                    >YouTube URL<input
+                      formControlName="url"
+                      type="url"
+                      placeholder="https://www.youtube.com/watch?v=..."
+                  /></label>
+                  <p class="muted small-text">{{ t("hint.youtubeAudio") }}</p>
                 } @else {
                   <label
                     >HTTP(S) URL<input

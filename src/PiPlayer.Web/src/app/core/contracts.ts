@@ -8,6 +8,7 @@ export type VisualSource =
     };
 export type AudioSource =
   | { kind: "localFile"; assetId: string }
+  | { kind: "youtubeAudio"; videoId: string }
   | {
       kind: "remoteAudioUrl";
       url: string;
@@ -245,7 +246,11 @@ export const defaultCircle: Circle = {
   visible: true,
 };
 export function youtube(source: Source | null): boolean {
-  return source?.kind === "youtubeVideo" || source?.kind === "youtubePlaylist";
+  return (
+    source?.kind === "youtubeVideo" ||
+    source?.kind === "youtubePlaylist" ||
+    source?.kind === "youtubeAudio"
+  );
 }
 export function uuid(): string {
   // UUID v7; Web Crypto randomUUID is unavailable on ordinary LAN HTTP origins.
@@ -269,7 +274,8 @@ export async function fingerprint(source: Source | null): Promise<string> {
     case "localFile":
       return `${source.kind}:${source.assetId}`;
     case "youtubeVideo":
-      return `youtubeVideo:${source.videoId}`;
+    case "youtubeAudio":
+      return `${source.kind}:${source.videoId}`;
     case "youtubePlaylist":
       return `youtubePlaylist:${source.playlistId}:${source.initialVideoId ?? ""}`;
     case "remoteAudioUrl":

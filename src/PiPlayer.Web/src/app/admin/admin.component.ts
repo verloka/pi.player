@@ -491,16 +491,27 @@ export class AdminComponent implements OnInit, OnDestroy {
     });
   }
   async selectAudio(autoplay: boolean): Promise<void> {
-    const f = this.audioSource.getRawValue();
-    const source: AudioSource =
-      f.kind === "localFile"
-        ? { kind: "localFile", assetId: f.assetId }
-        : {
-            kind: "remoteAudioUrl",
-            url: f.url,
-            streamMode: f.streamMode as "auto" | "file" | "live",
-          };
-    await this.command("audio", "setSource", { source, autoplay });
+    await this.run(async () => {
+      const f = this.audioSource.getRawValue();
+      let source: AudioSource;
+      if (f.kind === "localFile")
+        source = { kind: "localFile", assetId: f.assetId };
+      else if (f.kind === "youtubeAudio") {
+        const video = await this.api.request<
+          Extract<VisualSource, { kind: "youtubeVideo" }>
+        >("POST", "/api/sources/youtube/normalize", {
+          url: f.url,
+          videoOnly: true,
+        });
+        source = { kind: "youtubeAudio", videoId: video.videoId };
+      } else
+        source = {
+          kind: "remoteAudioUrl",
+          url: f.url,
+          streamMode: f.streamMode as "auto" | "file" | "live",
+        };
+      await this.command("audio", "setSource", { source, autoplay });
+    });
   }
   async applyGeometry(): Promise<void> {
     await this.command(
@@ -562,7 +573,8 @@ export class AdminComponent implements OnInit, OnDestroy {
         this.audioLibrary()?.items.find((a) => a.id === source.assetId)
           ?.displayName ?? this.t("source.audioMissing")
       );
-    if (source.kind === "youtubeVideo") return "YouTube · " + source.videoId;
+    if (source.kind === "youtubeVideo" || source.kind === "youtubeAudio")
+      return "YouTube · " + source.videoId;
     if (source.kind === "youtubePlaylist")
       return "YouTube playlist · " + source.playlistId;
     try {

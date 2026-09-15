@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Channel, VisualSource } from "../src/app/core/contracts";
+import {
+  Channel,
+  Source,
+  VisualSource,
+  fingerprint,
+} from "../src/app/core/contracts";
 import { YouTubeAdapter } from "../src/app/screen/adapters/youtube";
 import { autoplayGate } from "../src/app/screen/autoplay";
 type Api = NonNullable<typeof window.YT>;
@@ -101,7 +106,7 @@ class FakePlayer implements Player {
   }
 }
 const source: VisualSource = { kind: "youtubeVideo", videoId: "dQw4w9WgXcQ" };
-const channel = (s: VisualSource = source): Channel => ({
+const channel = (s: Source = source): Channel => ({
   source: s,
   playback: { loop: false, muted: true, volume: 70 },
   transport: "playing",
@@ -121,6 +126,77 @@ describe("official YouTube adapter with SDK double (not a live provider test)", 
   afterEach(() => {
     adapter?.dispose();
     delete window.YT;
+  });
+  it("keeps experimental audio controls, loop and disposal separate from a visual player", async () => {
+    const visualHost = document.createElement("div");
+    const visual = new YouTubeAdapter(source, visualHost, vi.fn(), true);
+    try {
+      await visual.load();
+      const visualPlayer = FakePlayer.last;
+      await visual.apply(channel(), 9, null);
+      visualPlayer.emit(1);
+
+      const audioSource = {
+        kind: "youtubeAudio" as const,
+        videoId: "M7lc1UVf-VE",
+      };
+      adapter = new YouTubeAdapter(
+        audioSource,
+        document.createElement("div"),
+        vi.fn(),
+        false,
+      );
+      await adapter.load();
+      const audioPlayer = FakePlayer.last;
+      const intent = {
+        ...channel(audioSource),
+        playback: { loop: true, muted: false, volume: 23 },
+      };
+      await adapter.apply(intent, 17, null);
+      audioPlayer.emit(1);
+      expect(audioPlayer.cueVideoById).toHaveBeenCalledWith({
+        videoId: audioSource.videoId,
+      });
+      expect(audioPlayer.cuePlaylist).not.toHaveBeenCalled();
+      expect(await fingerprint(audioSource)).toBe("youtubeAudio:M7lc1UVf-VE");
+      expect(audioPlayer.position).toBe(17);
+      expect(adapter.observation()).toMatchObject({
+        status: "playing",
+        actualVolume: 23,
+        actualMuted: false,
+        capabilities: {
+          canRotate: false,
+          rotationStatus: "disabled",
+          availablePlaybackRates: [1],
+          canLoop: true,
+        },
+      });
+
+      audioPlayer.emit(0);
+      expect(audioPlayer.position).toBe(0);
+      expect(audioPlayer.playVideo).toHaveBeenCalledTimes(2);
+      const paused = {
+        ...intent,
+        transport: "paused" as const,
+        playback: { ...intent.playback, muted: true },
+      };
+      adapter.updateIntent(paused);
+      await adapter.apply(paused, null, null);
+      audioPlayer.emit(2);
+      expect(adapter.observation()).toMatchObject({
+        status: "paused",
+        actualMuted: true,
+      });
+      adapter.dispose();
+      expect(audioPlayer.destroyed).toBe(true);
+      expect(visualPlayer.destroyed).toBe(false);
+      expect(visualPlayer.pauseVideo).not.toHaveBeenCalled();
+      expect(visualPlayer.position).toBe(9);
+      expect(visual.observation().status).toBe("playing");
+      expect(visualHost.childElementCount).toBe(1);
+    } finally {
+      visual.dispose();
+    }
   });
   it("waits for observed playing and handles autoplayBlocked", async () => {
     adapter = new YouTubeAdapter(

@@ -54,6 +54,7 @@ public static partial class Validate
     {
         LocalVideo v => "localVideo:" + v.AssetId, LocalFile a => "localFile:" + a.AssetId,
         YouTubeVideo v => "youtubeVideo:" + v.VideoId,
+        YouTubeAudio a => "youtubeAudio:" + a.VideoId,
         YouTubePlaylist p => "youtubePlaylist:" + p.PlaylistId + ":" + p.InitialVideoId,
         RemoteAudioUrl a => "remoteAudioUrl:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(a.Url + "|" + a.StreamMode))),
         _ => "none"

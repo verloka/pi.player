@@ -134,6 +134,9 @@ export const EN: Record<string, string> = {
   "action.playlistNext": "Next →",
   "option.localAudio": "Local audio",
   "option.remoteAudio": "Direct audio URL",
+  "option.youtubeAudio": "YouTube audio (experimental)",
+  "hint.youtubeAudio":
+    "Plays a single YouTube video off screen. A playlist in the URL is ignored. Video playback still uses device resources; availability depends on YouTube.",
   "hint.directAudio": "A direct link to the audio, not a music service page.",
   "field.mode": "Mode",
   "action.clearAudioSource": "Clear source",
@@ -368,6 +371,9 @@ export const RU: Record<string, string> = {
   "action.playlistNext": "Следующее →",
   "option.localAudio": "Локальное аудио",
   "option.remoteAudio": "Прямая audio URL",
+  "option.youtubeAudio": "Аудио YouTube (экспериментально)",
+  "hint.youtubeAudio":
+    "Воспроизводит одно видео YouTube за пределами экрана. Плейлист в ссылке игнорируется. Видео продолжает расходовать ресурсы устройства; доступность зависит от YouTube.",
   "hint.directAudio":
     "Прямая ссылка на аудио, не страница музыкального сервиса.",
   "field.mode": "Режим",

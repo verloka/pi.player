@@ -29,7 +29,7 @@ import { ChannelRenderer } from "./reconciliation";
   template: `<div #root class="screen-root">
     <div #circle class="circle-layer"></div>
     <div #visual class="visual-layer"></div>
-    <div #audio></div>
+    <div #audio class="audio-layer" aria-hidden="true"></div>
     @if (needsGesture()) {
       <button type="button" class="unlock" (click)="unlock()">
         <span class="unlock-glyph">&#9654;</span>
@@ -45,6 +45,8 @@ import { ChannelRenderer } from "./reconciliation";
     ".screen-root{position:fixed;inset:0;overflow:hidden;background:#000}",
     ".circle-layer{position:absolute;display:none;border-radius:50%;pointer-events:none}",
     ".visual-layer{position:absolute;transform-origin:50% 50%}",
+    // Experimental YouTube audio uses its own off-screen player; keep a real viewport for the embed.
+    ".audio-layer{position:fixed;left:-10000px;top:0;width:320px;height:200px;pointer-events:none}",
     // A signage screen must never be covered by a prompt nobody can dismiss: this is a corner banner.
     ".unlock{position:absolute;z-index:10;left:16px;bottom:16px;max-width:min(520px,calc(100% - 32px));display:flex;align-items:flex-start;gap:12px;border:1px solid rgba(210,250,89,.35);border-radius:10px;padding:12px 16px;text-align:left;cursor:pointer;color:#e8ebdf;background:rgba(10,12,12,.82);font:inherit}",
     ".unlock-glyph{font-size:22px;line-height:1.2;color:#d2fa59}",
@@ -268,6 +270,13 @@ export class ScreenComponent implements AfterViewInit, OnDestroy {
     });
   }
   private factory(source: Source, changed: () => void) {
+    if (source.kind === "youtubeAudio")
+      return new YouTubeAdapter(
+        source,
+        this.audio.nativeElement,
+        changed,
+        false,
+      );
     if (source.kind === "youtubeVideo" || source.kind === "youtubePlaylist")
       return new YouTubeAdapter(
         source,

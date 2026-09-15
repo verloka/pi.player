@@ -35,6 +35,7 @@ public sealed class MediaLibrary(JsonStore store, DataPaths paths, PiPlayerOptio
             case LocalVideo v: Validate.Require((await Get("videos", v.AssetId, ct)).Availability == "available", "assetMissing", "Video file is missing.", 404); break;
             case LocalFile a: Validate.Require((await Get("audio", a.AssetId, ct)).Availability == "available", "assetMissing", "Audio file is missing.", 404); break;
             case YouTubeVideo v: Validate.VideoId(v.VideoId); break;
+            case YouTubeAudio a: Validate.VideoId(a.VideoId); break;
             case YouTubePlaylist p: Validate.PlaylistId(p.PlaylistId); if (p.InitialVideoId != null) Validate.VideoId(p.InitialVideoId); break;
             case RemoteAudioUrl a: Validate.Remote(a.Url, options); Validate.Require(new[] { "auto", "file", "live" }.Contains(a.StreamMode), "invalidStreamMode", "Unknown stream mode."); break;
         }

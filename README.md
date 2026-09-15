@@ -116,6 +116,14 @@ The panel schematic shows the picture's position. Playback happens on `/screen`,
 
 The screen draws the background first, then a circle, then the video. The **Circle** sliders set its diameter and its offset from the centre of the screen, and **Reset** returns it to the centre. Its colour and visibility sit under the sliders. The circle is part of the current scene and is saved with visual presets.
 
+### Experimental YouTube audio
+
+In **Studio → Audio**, choose **YouTube audio (experimental)**, paste a video URL and select **Select and play** or **Load paused**. Watch, short-link and Shorts URLs use the same validation as Visual. A playlist parameter is ignored; playlist-only URLs are rejected. Audio has its own play/pause, stop, restart, seek, volume, mute and loop, and can be saved in an audio preset or restored at startup.
+
+This opt-in source runs a separate 320×200 YouTube iframe outside the visible screen. It does not replace or reposition Visual. It still plays video and may consume CPU, GPU and bandwidth; it is not an audio-only stream. Closing the admin panel leaves playback running on the kiosk. Clearing or replacing the audio source destroys its player. The page visibility and screen-session rules still apply.
+
+Hidden playback conflicts with the [YouTube API developer policies](https://developers.google.com/youtube/terms/developer-policies); this is an explicitly experimental mode, not a supported YouTube audio API. Embedding restrictions, ads, autoplay and provider changes can prevent playback. Real YouTube playback and sound on the Raspberry Pi require device acceptance.
+
 ## 3. Debug
 
 ### On the Pi over SSH

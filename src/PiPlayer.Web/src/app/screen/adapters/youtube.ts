@@ -1,9 +1,4 @@
-import {
-  Channel,
-  Observed,
-  PlaybackError,
-  VisualSource,
-} from "../../core/contracts";
+import { Channel, Observed, PlaybackError, Source } from "../../core/contracts";
 import { autoplayGate } from "../autoplay";
 import { capabilities, playbackError, PlayerAdapter } from "./player";
 
@@ -128,8 +123,8 @@ export class YouTubeAdapter implements PlayerAdapter {
   } | null = null;
   constructor(
     public readonly source: Extract<
-      VisualSource,
-      { kind: "youtubeVideo" | "youtubePlaylist" }
+      Source,
+      { kind: "youtubeVideo" | "youtubePlaylist" | "youtubeAudio" }
     >,
     private host: HTMLElement,
     private changed: () => void,
@@ -195,7 +190,7 @@ export class YouTubeAdapter implements PlayerAdapter {
             this.player.mute();
             this.hideCaptions();
             this.captionGuard ??= setInterval(() => this.hideCaptions(), 2000);
-            if (this.source.kind === "youtubeVideo")
+            if (this.source.kind !== "youtubePlaylist")
               this.player.cueVideoById({ videoId: this.source.videoId });
             else
               this.player.cuePlaylist({
@@ -283,7 +278,7 @@ export class YouTubeAdapter implements PlayerAdapter {
       state === 0 &&
       this.desired?.playback.loop &&
       this.desired.transport === "playing" &&
-      this.source.kind === "youtubeVideo" &&
+      this.source.kind !== "youtubePlaylist" &&
       !this.suspended
     ) {
       this.player.seekTo(0, true);
@@ -534,9 +529,15 @@ export class YouTubeAdapter implements PlayerAdapter {
       capabilities: capabilities({
         canSeek: duration > 0,
         canLoop: true,
-        availablePlaybackRates: p?.getAvailablePlaybackRates?.() ?? [1],
-        canRotate: this.rotationEnabled,
-        rotationStatus: this.rotationEnabled ? "experimental" : "disabled",
+        availablePlaybackRates:
+          this.source.kind === "youtubeAudio"
+            ? [1]
+            : (p?.getAvailablePlaybackRates?.() ?? [1]),
+        canRotate: this.source.kind !== "youtubeAudio" && this.rotationEnabled,
+        rotationStatus:
+          this.source.kind !== "youtubeAudio" && this.rotationEnabled
+            ? "experimental"
+            : "disabled",
       }),
     };
   }
